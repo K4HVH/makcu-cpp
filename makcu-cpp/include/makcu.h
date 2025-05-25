@@ -21,27 +21,8 @@ namespace makcu {
         SIDE5 = 4
     };
 
-    enum class KeyCode : uint8_t {
-        KEY_A = 0x04, KEY_B = 0x05, KEY_C = 0x06, KEY_D = 0x07,
-        KEY_E = 0x08, KEY_F = 0x09, KEY_G = 0x0A, KEY_H = 0x0B,
-        KEY_I = 0x0C, KEY_J = 0x0D, KEY_K = 0x0E, KEY_L = 0x0F,
-        KEY_M = 0x10, KEY_N = 0x11, KEY_O = 0x12, KEY_P = 0x13,
-        KEY_Q = 0x14, KEY_R = 0x15, KEY_S = 0x16, KEY_T = 0x17,
-        KEY_U = 0x18, KEY_V = 0x19, KEY_W = 0x1A, KEY_X = 0x1B,
-        KEY_Y = 0x1C, KEY_Z = 0x1D,
-        
-        KEY_1 = 0x1E, KEY_2 = 0x1F, KEY_3 = 0x20, KEY_4 = 0x21,
-        KEY_5 = 0x22, KEY_6 = 0x23, KEY_7 = 0x24, KEY_8 = 0x25,
-        KEY_9 = 0x26, KEY_0 = 0x27,
-        
-        KEY_ENTER = 0x28, KEY_ESCAPE = 0x29, KEY_BACKSPACE = 0x2A,
-        KEY_TAB = 0x2B, KEY_SPACEBAR = 0x2C,
-        
-        KEY_LEFT_CTRL = 0xE0, KEY_LEFT_SHIFT = 0xE1, KEY_LEFT_ALT = 0xE2,
-        KEY_LEFT_GUI = 0xE3, KEY_RIGHT_CTRL = 0xE4, KEY_RIGHT_SHIFT = 0xE5,
-        KEY_RIGHT_ALT = 0xE6, KEY_RIGHT_GUI = 0xE7
-    };
-
+    // Note: MAKCU device appears to be mouse-only based on testing
+    // Keyboard functionality is not supported on this device
     enum class ConnectionStatus {
         DISCONNECTED,
         CONNECTING,
@@ -100,22 +81,23 @@ namespace makcu {
 
     class ConnectionException : public MakcuException {
     public:
-        explicit ConnectionException(const std::string& message) 
-            : MakcuException("Connection error: " + message) {}
+        explicit ConnectionException(const std::string& message)
+            : MakcuException("Connection error: " + message) {
+        }
     };
 
     class CommandException : public MakcuException {
     public:
-        explicit CommandException(const std::string& message) 
-            : MakcuException("Command error: " + message) {}
+        explicit CommandException(const std::string& message)
+            : MakcuException("Command error: " + message) {
+        }
     };
 
-    // Main Device class
+    // Main Device class - MAKCU Mouse Controller
     class Device {
     public:
         // Callback types
         typedef std::function<void(MouseButton, bool)> MouseButtonCallback;
-        typedef std::function<void(KeyCode, bool)> KeyboardCallback;
 
         // Constructor and destructor
         Device();
@@ -124,7 +106,7 @@ namespace makcu {
         // Static methods
         static std::vector<DeviceInfo> findDevices();
         static std::string findFirstDevice();
-        
+
         // Connection
         bool connect(const std::string& port = "");
         void disconnect();
@@ -134,44 +116,63 @@ namespace makcu {
         // Device info
         DeviceInfo getDeviceInfo() const;
         std::string getVersion() const;
-        std::string getSerialNumber() const;
 
-        // Keyboard control
-        bool keyDown(KeyCode key);
-        bool keyUp(KeyCode key);
-        bool keyPress(KeyCode key, uint32_t duration_ms = 0);
-        bool multiKeyDown(const std::vector<KeyCode>& keys);
-        bool multiKeyUp(const std::vector<KeyCode>& keys);
-        bool multiKeyPress(const std::vector<KeyCode>& keys, uint32_t duration_ms = 0);
-        bool typeString(const std::string& text);
-        bool isKeyDown(KeyCode key);
-
-        // Mouse control
+        // Mouse button control
         bool mouseDown(MouseButton button);
         bool mouseUp(MouseButton button);
-        bool mouseClick(MouseButton button, uint32_t count = 1);
-        bool mouseMove(int32_t x, int32_t y);
-        bool mouseMoveTo(int32_t x, int32_t y);
-        bool mouseWheel(int32_t delta);
-        MouseButtonStates getMouseButtonStates();
+        bool mouseButtonState(MouseButton button); // Get current state
 
-        // Advanced mouse
-        bool mouseSetPosition(int32_t x, int32_t y);
-        std::pair<int32_t, int32_t> mouseGetPosition();
-        bool mouseCalibrate();
-        bool mouseSetScreenBounds(int32_t width, int32_t height);
+        // Mouse movement (enhanced v3.2 support)
+        bool mouseMove(int32_t x, int32_t y);                                    // Instant movement
+        bool mouseMoveSmooth(int32_t x, int32_t y, uint32_t segments);          // Randomized curve
+        bool mouseMoveBezier(int32_t x, int32_t y, uint32_t segments,
+            int32_t ctrl_x, int32_t ctrl_y);                     // Controlled Bezier curve
+
+        // Mouse wheel
+        bool mouseWheel(int32_t delta);
+
+        // Mouse locking (masks physical input)
+        bool lockMouseX(bool lock = true);
+        bool lockMouseY(bool lock = true);
+        bool lockMouseLeft(bool lock = true);
+        bool lockMouseMiddle(bool lock = true);
+        bool lockMouseRight(bool lock = true);
+        bool lockMouseSide1(bool lock = true);
+        bool lockMouseSide2(bool lock = true);
+
+        // Get lock states
+        bool isMouseXLocked();
+        bool isMouseYLocked();
+        bool isMouseLeftLocked();
+        bool isMouseMiddleLocked();
+        bool isMouseRightLocked();
+        bool isMouseSide1Locked();
+        bool isMouseSide2Locked();
+
+        // Mouse input catching (for captured physical input)
+        uint8_t catchMouseLeft();    // Returns captured left button presses
+        uint8_t catchMouseMiddle();  // Returns captured middle button presses  
+        uint8_t catchMouseRight();   // Returns captured right button presses
+        uint8_t catchMouseSide1();   // Returns captured side1 button presses
+        uint8_t catchMouseSide2();   // Returns captured side2 button presses
+
+        // Button monitoring (v3.2 bitmask API)
+        bool enableButtonMonitoring(bool enable = true);
+        bool isButtonMonitoringEnabled();
+        uint8_t getButtonMask(); // Returns bitmask of all button states
+
+        // Mouse serial spoofing (v3.2 feature)
+        std::string getMouseSerial();                    // Get current/original serial
+        bool setMouseSerial(const std::string& serial); // Spoof mouse serial
+        bool resetMouseSerial();                         // Reset to original
 
         // Device control
-        bool reset();
         bool setBaudRate(uint32_t baudRate);
-        bool enableButtonMonitoring(bool enable = true);
 
         // Callbacks
         void setMouseButtonCallback(MouseButtonCallback callback);
-        void setKeyboardCallback(KeyboardCallback callback);
 
         // Utility
-        bool delay(uint32_t milliseconds);
         bool sendRawCommand(const std::string& command) const;
         std::string receiveRawResponse() const;
 
@@ -186,8 +187,7 @@ namespace makcu {
     };
 
     // Utility functions
-    std::string keyCodeToString(KeyCode key);
-    KeyCode stringToKeyCode(const std::string& keyName);
     std::string mouseButtonToString(MouseButton button);
+    MouseButton stringToMouseButton(const std::string& buttonName);
 
 } // namespace makcu

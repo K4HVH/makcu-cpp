@@ -33,7 +33,6 @@ namespace makcu {
         mutable std::mutex mutex;
         std::thread monitorThread;
         Device::MouseButtonCallback mouseButtonCallback;
-        Device::KeyboardCallback keyboardCallback;
 
         Impl()
             : serialPort(std::make_unique<SerialPort>())
@@ -326,133 +325,7 @@ namespace makcu {
         return "";
     }
 
-    std::string Device::getSerialNumber() const {
-        if (!m_impl->connected) {
-            return "";
-        }
-
-        if (sendRawCommand("km.mac()\r")) {
-            return receiveRawResponse();
-        }
-
-        return "";
-    }
-
-    // Keyboard control methods
-    bool Device::keyDown(KeyCode key) {
-        if (!m_impl->connected) {
-            return false;
-        }
-
-        std::ostringstream cmd;
-        cmd << "km.down(" << static_cast<int>(key) << ")\r";
-        return sendRawCommand(cmd.str());
-    }
-
-    bool Device::keyUp(KeyCode key) {
-        if (!m_impl->connected) {
-            return false;
-        }
-
-        std::ostringstream cmd;
-        cmd << "km.up(" << static_cast<int>(key) << ")\r";
-        return sendRawCommand(cmd.str());
-    }
-
-    bool Device::keyPress(KeyCode key, uint32_t duration_ms) {
-        if (!m_impl->connected) {
-            return false;
-        }
-
-        std::ostringstream cmd;
-        if (duration_ms > 0) {
-            cmd << "km.press(" << static_cast<int>(key) << "," << duration_ms << ")\r";
-        }
-        else {
-            cmd << "km.press(" << static_cast<int>(key) << ")\r";
-        }
-        return sendRawCommand(cmd.str());
-    }
-
-    bool Device::multiKeyDown(const std::vector<KeyCode>& keys) {
-        if (!m_impl->connected || keys.empty()) {
-            return false;
-        }
-
-        std::ostringstream cmd;
-        cmd << "km.multidown(";
-        for (size_t i = 0; i < keys.size(); ++i) {
-            cmd << static_cast<int>(keys[i]);
-            if (i < keys.size() - 1) {
-                cmd << ",";
-            }
-        }
-        cmd << ")\r";
-        return sendRawCommand(cmd.str());
-    }
-
-    bool Device::multiKeyUp(const std::vector<KeyCode>& keys) {
-        if (!m_impl->connected || keys.empty()) {
-            return false;
-        }
-
-        std::ostringstream cmd;
-        cmd << "km.multiup(";
-        for (size_t i = 0; i < keys.size(); ++i) {
-            cmd << static_cast<int>(keys[i]);
-            if (i < keys.size() - 1) {
-                cmd << ",";
-            }
-        }
-        cmd << ")\r";
-        return sendRawCommand(cmd.str());
-    }
-
-    bool Device::multiKeyPress(const std::vector<KeyCode>& keys, uint32_t duration_ms) {
-        if (!m_impl->connected || keys.empty()) {
-            return false;
-        }
-
-        std::ostringstream cmd;
-        cmd << "km.multipress(";
-        for (size_t i = 0; i < keys.size(); ++i) {
-            cmd << static_cast<int>(keys[i]);
-            if (i < keys.size() - 1) {
-                cmd << ",";
-            }
-        }
-        if (duration_ms > 0) {
-            cmd << "," << duration_ms;
-        }
-        cmd << ")\r";
-        return sendRawCommand(cmd.str());
-    }
-
-    bool Device::typeString(const std::string& text) {
-        if (!m_impl->connected || text.empty()) {
-            return false;
-        }
-
-        std::ostringstream cmd;
-        cmd << "km.string(\"" << text << "\")\r";
-        return sendRawCommand(cmd.str());
-    }
-
-    bool Device::isKeyDown(KeyCode key) {
-        if (!m_impl->connected) {
-            return false;
-        }
-
-        std::ostringstream cmd;
-        cmd << "km.isdown(" << static_cast<int>(key) << ")\r";
-        if (sendRawCommand(cmd.str())) {
-            auto response = receiveRawResponse();
-            return response.find("1") != std::string::npos || response.find("3") != std::string::npos;
-        }
-        return false;
-    }
-
-    // Mouse control methods
+    // Mouse button control methods
     bool Device::mouseDown(MouseButton button) {
         if (!m_impl->connected) {
             return false;
@@ -463,8 +336,7 @@ namespace makcu {
         case MouseButton::LEFT:   cmd = "km.left(1)\r"; break;
         case MouseButton::RIGHT:  cmd = "km.right(1)\r"; break;
         case MouseButton::MIDDLE: cmd = "km.middle(1)\r"; break;
-        case MouseButton::SIDE4:  cmd = "km.side1(1)\r"; break;
-        case MouseButton::SIDE5:  cmd = "km.side2(1)\r"; break;
+        default: return false; // Side buttons not supported based on test results
         }
         return sendRawCommand(cmd);
     }
@@ -479,22 +351,32 @@ namespace makcu {
         case MouseButton::LEFT:   cmd = "km.left(0)\r"; break;
         case MouseButton::RIGHT:  cmd = "km.right(0)\r"; break;
         case MouseButton::MIDDLE: cmd = "km.middle(0)\r"; break;
-        case MouseButton::SIDE4:  cmd = "km.side1(0)\r"; break;
-        case MouseButton::SIDE5:  cmd = "km.side2(0)\r"; break;
+        default: return false; // Side buttons not supported based on test results
         }
         return sendRawCommand(cmd);
     }
 
-    bool Device::mouseClick(MouseButton button, uint32_t count) {
+    bool Device::mouseButtonState(MouseButton button) {
         if (!m_impl->connected) {
             return false;
         }
 
-        std::ostringstream cmd;
-        cmd << "km.click(" << static_cast<int>(button) << "," << count << ")\r";
-        return sendRawCommand(cmd.str());
+        std::string cmd;
+        switch (button) {
+        case MouseButton::LEFT:   cmd = "km.left()\r"; break;
+        case MouseButton::RIGHT:  cmd = "km.right()\r"; break;
+        case MouseButton::MIDDLE: cmd = "km.middle()\r"; break;
+        default: return false; // Side buttons not supported based on test results
+        }
+
+        if (sendRawCommand(cmd)) {
+            auto response = receiveRawResponse();
+            return response.find("1") != std::string::npos;
+        }
+        return false;
     }
 
+    // Mouse movement methods (v3.2 enhanced support)
     bool Device::mouseMove(int32_t x, int32_t y) {
         if (!m_impl->connected) {
             return false;
@@ -505,13 +387,23 @@ namespace makcu {
         return sendRawCommand(cmd.str());
     }
 
-    bool Device::mouseMoveTo(int32_t x, int32_t y) {
+    bool Device::mouseMoveSmooth(int32_t x, int32_t y, uint32_t segments) {
         if (!m_impl->connected) {
             return false;
         }
 
         std::ostringstream cmd;
-        cmd << "km.moveto(" << x << "," << y << ")\r";
+        cmd << "km.move(" << x << "," << y << "," << segments << ")\r";
+        return sendRawCommand(cmd.str());
+    }
+
+    bool Device::mouseMoveBezier(int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x, int32_t ctrl_y) {
+        if (!m_impl->connected) {
+            return false;
+        }
+
+        std::ostringstream cmd;
+        cmd << "km.move(" << x << "," << y << "," << segments << "," << ctrl_x << "," << ctrl_y << ")\r";
         return sendRawCommand(cmd.str());
     }
 
@@ -525,53 +417,192 @@ namespace makcu {
         return sendRawCommand(cmd.str());
     }
 
-    MouseButtonStates Device::getMouseButtonStates() {
-        MouseButtonStates states;
-        return states;
-    }
-
-    bool Device::mouseSetPosition(int32_t x, int32_t y) {
-        return mouseMoveTo(x, y);
-    }
-
-    std::pair<int32_t, int32_t> Device::mouseGetPosition() {
-        return { 0, 0 };
-    }
-
-    bool Device::mouseCalibrate() {
-        if (!m_impl->connected) {
-            return false;
-        }
-
-        return sendRawCommand("km.zero()\r");
-    }
-
-    bool Device::mouseSetScreenBounds(int32_t width, int32_t height) {
-        if (!m_impl->connected) {
-            return false;
-        }
-
+    // Mouse locking methods
+    bool Device::lockMouseX(bool lock) {
+        if (!m_impl->connected) return false;
         std::ostringstream cmd;
-        cmd << "km.screen(" << width << "," << height << ")\r";
+        cmd << "km.lock_mx(" << (lock ? 1 : 0) << ")\r";
         return sendRawCommand(cmd.str());
     }
 
-    bool Device::reset() {
-        if (!m_impl->connected) {
-            return false;
-        }
-
-        return sendRawCommand("km.init()\r");
+    bool Device::lockMouseY(bool lock) {
+        if (!m_impl->connected) return false;
+        std::ostringstream cmd;
+        cmd << "km.lock_my(" << (lock ? 1 : 0) << ")\r";
+        return sendRawCommand(cmd.str());
     }
 
-    bool Device::setBaudRate(uint32_t baudRate) {
-        if (!m_impl->connected) {
-            return false;
-        }
-
-        return m_impl->serialPort->setBaudRate(baudRate);
+    bool Device::lockMouseLeft(bool lock) {
+        if (!m_impl->connected) return false;
+        std::ostringstream cmd;
+        cmd << "km.lock_ml(" << (lock ? 1 : 0) << ")\r";
+        return sendRawCommand(cmd.str());
     }
 
+    bool Device::lockMouseMiddle(bool lock) {
+        if (!m_impl->connected) return false;
+        std::ostringstream cmd;
+        cmd << "km.lock_mm(" << (lock ? 1 : 0) << ")\r";
+        return sendRawCommand(cmd.str());
+    }
+
+    bool Device::lockMouseRight(bool lock) {
+        if (!m_impl->connected) return false;
+        std::ostringstream cmd;
+        cmd << "km.lock_mr(" << (lock ? 1 : 0) << ")\r";
+        return sendRawCommand(cmd.str());
+    }
+
+    bool Device::lockMouseSide1(bool lock) {
+        if (!m_impl->connected) return false;
+        std::ostringstream cmd;
+        cmd << "km.lock_ms1(" << (lock ? 1 : 0) << ")\r";
+        return sendRawCommand(cmd.str());
+    }
+
+    bool Device::lockMouseSide2(bool lock) {
+        if (!m_impl->connected) return false;
+        std::ostringstream cmd;
+        cmd << "km.lock_ms2(" << (lock ? 1 : 0) << ")\r";
+        return sendRawCommand(cmd.str());
+    }
+
+    // Get lock states
+    bool Device::isMouseXLocked() {
+        if (!m_impl->connected) return false;
+        if (sendRawCommand("km.lock_mx()\r")) {
+            auto response = receiveRawResponse();
+            return response.find("1") != std::string::npos;
+        }
+        return false;
+    }
+
+    bool Device::isMouseYLocked() {
+        if (!m_impl->connected) return false;
+        if (sendRawCommand("km.lock_my()\r")) {
+            auto response = receiveRawResponse();
+            return response.find("1") != std::string::npos;
+        }
+        return false;
+    }
+
+    bool Device::isMouseLeftLocked() {
+        if (!m_impl->connected) return false;
+        if (sendRawCommand("km.lock_ml()\r")) {
+            auto response = receiveRawResponse();
+            return response.find("1") != std::string::npos;
+        }
+        return false;
+    }
+
+    bool Device::isMouseMiddleLocked() {
+        if (!m_impl->connected) return false;
+        if (sendRawCommand("km.lock_mm()\r")) {
+            auto response = receiveRawResponse();
+            return response.find("1") != std::string::npos;
+        }
+        return false;
+    }
+
+    bool Device::isMouseRightLocked() {
+        if (!m_impl->connected) return false;
+        if (sendRawCommand("km.lock_mr()\r")) {
+            auto response = receiveRawResponse();
+            return response.find("1") != std::string::npos;
+        }
+        return false;
+    }
+
+    bool Device::isMouseSide1Locked() {
+        if (!m_impl->connected) return false;
+        if (sendRawCommand("km.lock_ms1()\r")) {
+            auto response = receiveRawResponse();
+            return response.find("1") != std::string::npos;
+        }
+        return false;
+    }
+
+    bool Device::isMouseSide2Locked() {
+        if (!m_impl->connected) return false;
+        if (sendRawCommand("km.lock_ms2()\r")) {
+            auto response = receiveRawResponse();
+            return response.find("1") != std::string::npos;
+        }
+        return false;
+    }
+
+    // Mouse input catching methods
+    uint8_t Device::catchMouseLeft() {
+        if (!m_impl->connected) return 0;
+        if (sendRawCommand("km.catch_ml()\r")) {
+            auto response = receiveRawResponse();
+            try {
+                return static_cast<uint8_t>(std::stoi(response));
+            }
+            catch (...) {
+                return 0;
+            }
+        }
+        return 0;
+    }
+
+    uint8_t Device::catchMouseMiddle() {
+        if (!m_impl->connected) return 0;
+        if (sendRawCommand("km.catch_mm()\r")) {
+            auto response = receiveRawResponse();
+            try {
+                return static_cast<uint8_t>(std::stoi(response));
+            }
+            catch (...) {
+                return 0;
+            }
+        }
+        return 0;
+    }
+
+    uint8_t Device::catchMouseRight() {
+        if (!m_impl->connected) return 0;
+        if (sendRawCommand("km.catch_mr()\r")) {
+            auto response = receiveRawResponse();
+            try {
+                return static_cast<uint8_t>(std::stoi(response));
+            }
+            catch (...) {
+                return 0;
+            }
+        }
+        return 0;
+    }
+
+    uint8_t Device::catchMouseSide1() {
+        if (!m_impl->connected) return 0;
+        if (sendRawCommand("km.catch_ms1()\r")) {
+            auto response = receiveRawResponse();
+            try {
+                return static_cast<uint8_t>(std::stoi(response));
+            }
+            catch (...) {
+                return 0;
+            }
+        }
+        return 0;
+    }
+
+    uint8_t Device::catchMouseSide2() {
+        if (!m_impl->connected) return 0;
+        if (sendRawCommand("km.catch_ms2()\r")) {
+            auto response = receiveRawResponse();
+            try {
+                return static_cast<uint8_t>(std::stoi(response));
+            }
+            catch (...) {
+                return 0;
+            }
+        }
+        return 0;
+    }
+
+    // Button monitoring methods (v3.2 bitmask API)
     bool Device::enableButtonMonitoring(bool enable) {
         if (!m_impl->connected) {
             return false;
@@ -582,22 +613,53 @@ namespace makcu {
         return sendRawCommand(cmd.str());
     }
 
-    void Device::setMouseButtonCallback(MouseButtonCallback callback) {
-        m_impl->mouseButtonCallback = callback;
+    bool Device::isButtonMonitoringEnabled() {
+        if (!m_impl->connected) return false;
+        if (sendRawCommand("km.buttons()\r")) {
+            auto response = receiveRawResponse();
+            return response.find("1") != std::string::npos;
+        }
+        return false;
     }
 
-    void Device::setKeyboardCallback(KeyboardCallback callback) {
-        m_impl->keyboardCallback = callback;
+    uint8_t Device::getButtonMask() {
+        // This would need to be implemented by reading the real-time button data
+        // from the monitoring loop or by sending a specific command
+        // For now, returning 0 as placeholder
+        return 0;
     }
 
-    bool Device::delay(uint32_t milliseconds) {
+    // Mouse serial spoofing methods (v3.2 feature)
+    std::string Device::getMouseSerial() {
+        if (!m_impl->connected) return "";
+        if (sendRawCommand("km.serial()\r")) {
+            return receiveRawResponse();
+        }
+        return "";
+    }
+
+    bool Device::setMouseSerial(const std::string& serial) {
+        if (!m_impl->connected) return false;
+        std::ostringstream cmd;
+        cmd << "km.serial('" << serial << "')\r";
+        return sendRawCommand(cmd.str());
+    }
+
+    bool Device::resetMouseSerial() {
+        if (!m_impl->connected) return false;
+        return sendRawCommand("km.serial(0)\r");
+    }
+
+    bool Device::setBaudRate(uint32_t baudRate) {
         if (!m_impl->connected) {
             return false;
         }
 
-        std::ostringstream cmd;
-        cmd << "km.delay(" << milliseconds << ")\r";
-        return sendRawCommand(cmd.str());
+        return m_impl->serialPort->setBaudRate(baudRate);
+    }
+
+    void Device::setMouseButtonCallback(MouseButtonCallback callback) {
+        m_impl->mouseButtonCallback = callback;
     }
 
     bool Device::sendRawCommand(const std::string& command) const {
@@ -619,79 +681,6 @@ namespace makcu {
     }
 
     // Utility functions
-    std::string keyCodeToString(KeyCode key) {
-        switch (key) {
-        case KeyCode::KEY_A: return "A";
-        case KeyCode::KEY_B: return "B";
-        case KeyCode::KEY_C: return "C";
-        case KeyCode::KEY_D: return "D";
-        case KeyCode::KEY_E: return "E";
-        case KeyCode::KEY_F: return "F";
-        case KeyCode::KEY_G: return "G";
-        case KeyCode::KEY_H: return "H";
-        case KeyCode::KEY_I: return "I";
-        case KeyCode::KEY_J: return "J";
-        case KeyCode::KEY_K: return "K";
-        case KeyCode::KEY_L: return "L";
-        case KeyCode::KEY_M: return "M";
-        case KeyCode::KEY_N: return "N";
-        case KeyCode::KEY_O: return "O";
-        case KeyCode::KEY_P: return "P";
-        case KeyCode::KEY_Q: return "Q";
-        case KeyCode::KEY_R: return "R";
-        case KeyCode::KEY_S: return "S";
-        case KeyCode::KEY_T: return "T";
-        case KeyCode::KEY_U: return "U";
-        case KeyCode::KEY_V: return "V";
-        case KeyCode::KEY_W: return "W";
-        case KeyCode::KEY_X: return "X";
-        case KeyCode::KEY_Y: return "Y";
-        case KeyCode::KEY_Z: return "Z";
-        case KeyCode::KEY_SPACEBAR: return "SPACE";
-        case KeyCode::KEY_ENTER: return "ENTER";
-        case KeyCode::KEY_ESCAPE: return "ESCAPE";
-        default: return "UNKNOWN";
-        }
-    }
-
-    KeyCode stringToKeyCode(const std::string& keyName) {
-        std::string upper = keyName;
-        std::transform(upper.begin(), upper.end(), upper.begin(),
-            [](unsigned char c) { return std::toupper(c); });
-
-        if (upper == "A") return KeyCode::KEY_A;
-        if (upper == "B") return KeyCode::KEY_B;
-        if (upper == "C") return KeyCode::KEY_C;
-        if (upper == "D") return KeyCode::KEY_D;
-        if (upper == "E") return KeyCode::KEY_E;
-        if (upper == "F") return KeyCode::KEY_F;
-        if (upper == "G") return KeyCode::KEY_G;
-        if (upper == "H") return KeyCode::KEY_H;
-        if (upper == "I") return KeyCode::KEY_I;
-        if (upper == "J") return KeyCode::KEY_J;
-        if (upper == "K") return KeyCode::KEY_K;
-        if (upper == "L") return KeyCode::KEY_L;
-        if (upper == "M") return KeyCode::KEY_M;
-        if (upper == "N") return KeyCode::KEY_N;
-        if (upper == "O") return KeyCode::KEY_O;
-        if (upper == "P") return KeyCode::KEY_P;
-        if (upper == "Q") return KeyCode::KEY_Q;
-        if (upper == "R") return KeyCode::KEY_R;
-        if (upper == "S") return KeyCode::KEY_S;
-        if (upper == "T") return KeyCode::KEY_T;
-        if (upper == "U") return KeyCode::KEY_U;
-        if (upper == "V") return KeyCode::KEY_V;
-        if (upper == "W") return KeyCode::KEY_W;
-        if (upper == "X") return KeyCode::KEY_X;
-        if (upper == "Y") return KeyCode::KEY_Y;
-        if (upper == "Z") return KeyCode::KEY_Z;
-        if (upper == "SPACE") return KeyCode::KEY_SPACEBAR;
-        if (upper == "ENTER") return KeyCode::KEY_ENTER;
-        if (upper == "ESCAPE") return KeyCode::KEY_ESCAPE;
-
-        return KeyCode::KEY_A; // Default fallback
-    }
-
     std::string mouseButtonToString(MouseButton button) {
         switch (button) {
         case MouseButton::LEFT: return "LEFT";
@@ -703,4 +692,18 @@ namespace makcu {
         return "UNKNOWN";
     }
 
-} // namespace makcus
+    MouseButton stringToMouseButton(const std::string& buttonName) {
+        std::string upper = buttonName;
+        std::transform(upper.begin(), upper.end(), upper.begin(),
+            [](unsigned char c) { return std::toupper(c); });
+
+        if (upper == "LEFT") return MouseButton::LEFT;
+        if (upper == "RIGHT") return MouseButton::RIGHT;
+        if (upper == "MIDDLE") return MouseButton::MIDDLE;
+        if (upper == "SIDE4") return MouseButton::SIDE4;
+        if (upper == "SIDE5") return MouseButton::SIDE5;
+
+        return MouseButton::LEFT; // Default fallback
+    }
+
+} // namespace makcu
