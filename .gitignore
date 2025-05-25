@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+
+.vs/
+x64/
+makcu-cpp/x64/
