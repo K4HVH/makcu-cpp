@@ -15,7 +15,7 @@
 
 namespace makcu {
 
-    SerialPort::SerialPort() 
+    SerialPort::SerialPort()
         : m_baudRate(115200)
         , m_timeout(1000)
         , m_isOpen(false)
@@ -37,8 +37,9 @@ namespace makcu {
 
     bool SerialPort::open(const std::string& port, uint32_t baudRate) {
         std::lock_guard<std::mutex> lock(m_mutex);
-        
+
         if (m_isOpen) {
+            std::cout << "Port already open, closing first...\n";
             close();
         }
 
@@ -47,27 +48,56 @@ namespace makcu {
 
 #ifdef _WIN32
         std::string fullPortName = "\\\\.\\" + port;
+        std::cout << "Attempting to open: " << fullPortName << "\n";
+
         m_handle = CreateFileA(
             fullPortName.c_str(),
             GENERIC_READ | GENERIC_WRITE,
-            0,
-            nullptr,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            nullptr
+            0,                    // No sharing
+            nullptr,             // Default security
+            OPEN_EXISTING,       // Must exist
+            FILE_ATTRIBUTE_NORMAL, // Normal file
+            nullptr              // No template
         );
 
         if (m_handle == INVALID_HANDLE_VALUE) {
+            DWORD error = GetLastError();
+            std::cout << "CreateFileA failed with error code: " << error << "\n";
+
+            switch (error) {
+            case ERROR_FILE_NOT_FOUND:
+                std::cout << "Error: Port not found (ERROR_FILE_NOT_FOUND)\n";
+                break;
+            case ERROR_ACCESS_DENIED:
+                std::cout << "Error: Access denied - port may be in use by another application (ERROR_ACCESS_DENIED)\n";
+                break;
+            case ERROR_SHARING_VIOLATION:
+                std::cout << "Error: Sharing violation - port is already open (ERROR_SHARING_VIOLATION)\n";
+                break;
+            case ERROR_INVALID_PARAMETER:
+                std::cout << "Error: Invalid parameter (ERROR_INVALID_PARAMETER)\n";
+                break;
+            default:
+                std::cout << "Error: Unknown error code " << error << "\n";
+                break;
+            }
             return false;
         }
+
+        std::cout << "CreateFileA succeeded, handle: " << m_handle << "\n";
+
+        // FIXED: Set m_isOpen to true BEFORE calling configurePort
+        m_isOpen = true;
 
         if (!configurePort()) {
+            std::cout << "configurePort() failed\n";
             CloseHandle(m_handle);
             m_handle = INVALID_HANDLE_VALUE;
+            m_isOpen = false;  // Reset on failure
             return false;
         }
 
-        m_isOpen = true;
+        std::cout << "Port configured and opened successfully\n";
         return true;
 #else
         // Linux implementation would go here
@@ -77,10 +107,12 @@ namespace makcu {
 
     void SerialPort::close() {
         std::lock_guard<std::mutex> lock(m_mutex);
-        
+
         if (!m_isOpen) {
             return;
         }
+
+        std::cout << "Closing serial port...\n";
 
 #ifdef _WIN32
         if (m_handle != INVALID_HANDLE_VALUE) {
@@ -95,6 +127,7 @@ namespace makcu {
 #endif
 
         m_isOpen = false;
+        std::cout << "Serial port closed\n";
     }
 
     bool SerialPort::isOpen() const {
@@ -103,7 +136,7 @@ namespace makcu {
 
     bool SerialPort::setBaudRate(uint32_t baudRate) {
         std::lock_guard<std::mutex> lock(m_mutex);
-        
+
         if (!m_isOpen) {
             m_baudRate = baudRate;
             return true;
@@ -112,8 +145,16 @@ namespace makcu {
         m_baudRate = baudRate;
 
 #ifdef _WIN32
+        std::cout << "Setting baud rate to: " << baudRate << "\n";
         m_dcb.BaudRate = baudRate;
-        return SetCommState(m_handle, &m_dcb) != 0;
+        BOOL result = SetCommState(m_handle, &m_dcb);
+        if (!result) {
+            DWORD error = GetLastError();
+            std::cout << "SetCommState failed with error: " << error << "\n";
+            return false;
+        }
+        std::cout << "Baud rate set successfully\n";
+        return true;
 #else
         return false;
 #endif
@@ -129,7 +170,7 @@ namespace makcu {
 
     bool SerialPort::write(const std::vector<uint8_t>& data) {
         std::lock_guard<std::mutex> lock(m_mutex);
-        
+
         if (!m_isOpen || data.empty()) {
             return false;
         }
@@ -144,7 +185,13 @@ namespace makcu {
             nullptr
         );
 
-        return result && (bytesWritten == data.size());
+        if (!result) {
+            DWORD error = GetLastError();
+            std::cout << "WriteFile failed with error: " << error << "\n";
+            return false;
+        }
+
+        return bytesWritten == data.size();
 #else
         return false;
 #endif
@@ -157,7 +204,7 @@ namespace makcu {
 
     std::vector<uint8_t> SerialPort::read(size_t maxBytes) {
         std::lock_guard<std::mutex> lock(m_mutex);
-        
+
         std::vector<uint8_t> buffer;
         if (!m_isOpen || maxBytes == 0) {
             return buffer;
@@ -166,7 +213,7 @@ namespace makcu {
 #ifdef _WIN32
         buffer.resize(maxBytes);
         DWORD bytesRead = 0;
-        
+
         BOOL result = ReadFile(
             m_handle,
             buffer.data(),
@@ -177,7 +224,8 @@ namespace makcu {
 
         if (result && bytesRead > 0) {
             buffer.resize(bytesRead);
-        } else {
+        }
+        else {
             buffer.clear();
         }
 #endif
@@ -205,7 +253,7 @@ namespace makcu {
 
     size_t SerialPort::available() const {
         std::lock_guard<std::mutex> lock(m_mutex);
-        
+
         if (!m_isOpen) {
             return 0;
         }
@@ -213,7 +261,7 @@ namespace makcu {
 #ifdef _WIN32
         COMSTAT comStat;
         DWORD errors;
-        
+
         if (ClearCommError(m_handle, &errors, &comStat)) {
             return comStat.cbInQue;
         }
@@ -224,7 +272,7 @@ namespace makcu {
 
     bool SerialPort::flush() {
         std::lock_guard<std::mutex> lock(m_mutex);
-        
+
         if (!m_isOpen) {
             return false;
         }
@@ -262,8 +310,8 @@ namespace makcu {
                 valueNameSize = sizeof(valueName);
                 dataSize = sizeof(data);
 
-                LONG result = RegEnumValueA(hKey, index++, valueName, &valueNameSize, nullptr, &dataType, 
-                                          reinterpret_cast<BYTE*>(data), &dataSize);
+                LONG result = RegEnumValueA(hKey, index++, valueName, &valueNameSize, nullptr, &dataType,
+                    reinterpret_cast<BYTE*>(data), &dataSize);
 
                 if (result == ERROR_NO_MORE_ITEMS) {
                     break;
@@ -284,7 +332,6 @@ namespace makcu {
 
     std::vector<std::string> SerialPort::findMakcuPorts() {
         std::vector<std::string> makcuPorts;
-        auto allPorts = getAvailablePorts();
 
 #ifdef _WIN32
         HDEVINFO deviceInfoSet = SetupDiGetClassDevs(&GUID_DEVCLASS_PORTS, nullptr, nullptr, DIGCF_PRESENT);
@@ -294,29 +341,29 @@ namespace makcu {
 
         SP_DEVINFO_DATA deviceInfoData;
         deviceInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
-        
+
         for (DWORD i = 0; SetupDiEnumDeviceInfo(deviceInfoSet, i, &deviceInfoData); i++) {
             char buffer[256];
             DWORD bufferSize = sizeof(buffer);
-            
-            if (SetupDiGetDeviceRegistryPropertyA(deviceInfoSet, &deviceInfoData, SPDRP_DEVICEDESC, 
-                                                 nullptr, reinterpret_cast<BYTE*>(buffer), bufferSize, nullptr)) {
+
+            if (SetupDiGetDeviceRegistryPropertyA(deviceInfoSet, &deviceInfoData, SPDRP_DEVICEDESC,
+                nullptr, reinterpret_cast<BYTE*>(buffer), bufferSize, nullptr)) {
                 std::string description(buffer);
-                
+
                 if (description.find("USB-Enhanced-SERIAL CH343") != std::string::npos ||
                     description.find("USB-SERIAL CH340") != std::string::npos) {
-                    
+
                     // Get the COM port name
                     HKEY hDeviceKey = SetupDiOpenDevRegKey(deviceInfoSet, &deviceInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
                     if (hDeviceKey != INVALID_HANDLE_VALUE) {
                         char portName[256];
                         DWORD portNameSize = sizeof(portName);
-                        
-                        if (RegQueryValueExA(hDeviceKey, "PortName", nullptr, nullptr, 
-                                           reinterpret_cast<BYTE*>(portName), &portNameSize) == ERROR_SUCCESS) {
+
+                        if (RegQueryValueExA(hDeviceKey, "PortName", nullptr, nullptr,
+                            reinterpret_cast<BYTE*>(portName), &portNameSize) == ERROR_SUCCESS) {
                             makcuPorts.emplace_back(portName);
                         }
-                        
+
                         RegCloseKey(hDeviceKey);
                     }
                 }
@@ -330,16 +377,20 @@ namespace makcu {
     }
 
     bool SerialPort::configurePort() {
-        if (!m_isOpen) {
+        // FIXED: Removed the m_isOpen check since this is only called after successful CreateFileA
+
+#ifdef _WIN32
+        std::cout << "Configuring port...\n";
+
+        m_dcb.DCBlength = sizeof(DCB);
+
+        if (!GetCommState(m_handle, &m_dcb)) {
+            DWORD error = GetLastError();
+            std::cout << "GetCommState failed with error: " << error << "\n";
             return false;
         }
 
-#ifdef _WIN32
-        m_dcb.DCBlength = sizeof(DCB);
-        
-        if (!GetCommState(m_handle, &m_dcb)) {
-            return false;
-        }
+        std::cout << "Current DCB retrieved, setting parameters...\n";
 
         m_dcb.BaudRate = m_baudRate;
         m_dcb.ByteSize = 8;
@@ -360,10 +411,15 @@ namespace makcu {
         m_dcb.fAbortOnError = FALSE;
 
         if (!SetCommState(m_handle, &m_dcb)) {
+            DWORD error = GetLastError();
+            std::cout << "SetCommState failed with error: " << error << "\n";
             return false;
         }
 
+        std::cout << "DCB set successfully\n";
+
         updateTimeouts();
+        std::cout << "Port configuration completed successfully\n";
         return true;
 #else
         return false;
@@ -371,18 +427,23 @@ namespace makcu {
     }
 
     void SerialPort::updateTimeouts() {
-        if (!m_isOpen) {
-            return;
-        }
+        // FIXED: Removed the m_isOpen check since this is only called when port is known to be open
 
 #ifdef _WIN32
+        std::cout << "Setting timeouts...\n";
         m_timeouts.ReadIntervalTimeout = 50;
         m_timeouts.ReadTotalTimeoutConstant = m_timeout;
         m_timeouts.ReadTotalTimeoutMultiplier = 10;
         m_timeouts.WriteTotalTimeoutConstant = m_timeout;
         m_timeouts.WriteTotalTimeoutMultiplier = 10;
 
-        SetCommTimeouts(m_handle, &m_timeouts);
+        if (!SetCommTimeouts(m_handle, &m_timeouts)) {
+            DWORD error = GetLastError();
+            std::cout << "SetCommTimeouts failed with error: " << error << "\n";
+        }
+        else {
+            std::cout << "Timeouts set successfully\n";
+        }
 #endif
     }
 

@@ -20,7 +20,7 @@ namespace makcu {
     constexpr uint32_t HIGH_SPEED_BAUD_RATE = 4000000;
 
     // Baud rate change command
-    const std::vector<uint8_t> BAUD_CHANGE_COMMAND = {0xDE, 0xAD, 0x05, 0x00, 0xA5, 0x00, 0x09, 0x3D, 0x00};
+    const std::vector<uint8_t> BAUD_CHANGE_COMMAND = { 0xDE, 0xAD, 0x05, 0x00, 0xA5, 0x00, 0x09, 0x3D, 0x00 };
 
     // PIMPL implementation
     class Device::Impl {
@@ -35,7 +35,7 @@ namespace makcu {
         Device::MouseButtonCallback mouseButtonCallback;
         Device::KeyboardCallback keyboardCallback;
 
-        Impl() 
+        Impl()
             : serialPort(std::make_unique<SerialPort>())
             , status(ConnectionStatus::DISCONNECTED)
             , connected(false)
@@ -50,35 +50,72 @@ namespace makcu {
 
         bool switchToHighSpeedMode() {
             if (!serialPort->isOpen()) {
+                std::cout << "Error: Serial port not open for baud rate switch\n";
                 return false;
             }
 
+            std::cout << "Sending baud rate change command...\n";
+
             // Send baud rate change command
             if (!serialPort->write(BAUD_CHANGE_COMMAND)) {
+                std::cout << "Error: Failed to send baud rate change command\n";
                 return false;
             }
 
             if (!serialPort->flush()) {
+                std::cout << "Error: Failed to flush after baud rate command\n";
                 return false;
             }
+
+            std::cout << "Baud rate command sent successfully\n";
 
             // Close and reopen at high speed
             std::string portName = serialPort->getPortName();
             serialPort->close();
 
+            std::cout << "Port closed, waiting before reopening...\n";
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-            return serialPort->open(portName, HIGH_SPEED_BAUD_RATE);
+            std::cout << "Reopening port at " << HIGH_SPEED_BAUD_RATE << " baud...\n";
+            if (!serialPort->open(portName, HIGH_SPEED_BAUD_RATE)) {
+                std::cout << "Error: Failed to reopen port at high speed\n";
+                return false;
+            }
+
+            std::cout << "Successfully switched to high-speed mode\n";
+            return true;
         }
 
         bool initializeDevice() {
-            // Send initial commands to verify device is responding
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (!serialPort->isOpen()) {
+                std::cout << "Error: Serial port not open for initialization\n";
+                return false;
+            }
+
+            std::cout << "Initializing device...\n";
+
+            // Wait a bit for device to be ready (like Python script does)
+            std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
             // Enable button monitoring
-            std::ostringstream cmd;
-            cmd << "km.buttons(1)\r";
-            return serialPort->write(cmd.str());
+            std::string cmd = "km.buttons(1)\r";
+            std::cout << "Sending initialization command: " << cmd;
+
+            if (!serialPort->write(cmd)) {
+                std::cout << "Error: Failed to send initialization command\n";
+                return false;
+            }
+
+            if (!serialPort->flush()) {
+                std::cout << "Error: Failed to flush after initialization\n";
+                return false;
+            }
+
+            // Wait a bit like Python script
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+            std::cout << "Device initialized successfully\n";
+            return true;
         }
 
         void startMonitoring() {
@@ -86,6 +123,7 @@ namespace makcu {
                 return;
             }
 
+            std::cout << "Starting monitoring thread...\n";
             monitoring = true;
             monitorThread = std::thread(&Impl::monitoringLoop, this);
         }
@@ -95,6 +133,7 @@ namespace makcu {
                 return;
             }
 
+            std::cout << "Stopping monitoring thread...\n";
             monitoring = false;
             if (monitorThread.joinable()) {
                 monitorThread.join();
@@ -103,20 +142,28 @@ namespace makcu {
 
         void monitoringLoop() {
             uint8_t lastValue = 0;
+            std::cout << "Monitoring loop started\n";
 
             while (monitoring && connected) {
-                if (serialPort->available() > 0) {
-                    uint8_t byte;
-                    if (serialPort->readByte(byte)) {
-                        if (byte != lastValue) {
-                            processButtonData(byte);
-                            lastValue = byte;
+                try {
+                    if (serialPort->available() > 0) {
+                        uint8_t byte;
+                        if (serialPort->readByte(byte)) {
+                            if (byte != lastValue) {
+                                processButtonData(byte);
+                                lastValue = byte;
+                            }
                         }
                     }
                 }
-                
+                catch (const std::exception& e) {
+                    std::cout << "Error in monitoring loop: " << e.what() << "\n";
+                }
+
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
             }
+
+            std::cout << "Monitoring loop ended\n";
         }
 
         bool processButtonData(uint8_t data) {
@@ -147,7 +194,10 @@ namespace makcu {
         std::vector<DeviceInfo> devices;
         auto ports = SerialPort::findMakcuPorts();
 
+        std::cout << "SerialPort::findMakcuPorts() returned " << ports.size() << " ports\n";
+
         for (const auto& port : ports) {
+            std::cout << "Found MAKCU port: " << port << "\n";
             DeviceInfo info;
             info.port = port;
             info.description = TARGET_DESC;
@@ -172,35 +222,47 @@ namespace makcu {
         std::lock_guard<std::mutex> lock(m_impl->mutex);
 
         if (m_impl->connected) {
+            std::cout << "Already connected\n";
             return true;
         }
 
         std::string targetPort = port;
         if (targetPort.empty()) {
+            std::cout << "No port specified, searching for device...\n";
             targetPort = findFirstDevice();
             if (targetPort.empty()) {
+                std::cout << "No MAKCU device found\n";
                 m_impl->status = ConnectionStatus::CONNECTION_ERROR;
                 return false;
             }
         }
 
+        std::cout << "Attempting to connect to " << targetPort << "\n";
         m_impl->status = ConnectionStatus::CONNECTING;
 
         // Try to open at initial baud rate
+        std::cout << "Opening port at " << INITIAL_BAUD_RATE << " baud...\n";
         if (!m_impl->serialPort->open(targetPort, INITIAL_BAUD_RATE)) {
+            std::cout << "Failed to open port " << targetPort << " at " << INITIAL_BAUD_RATE << " baud\n";
             m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             return false;
         }
 
+        std::cout << "Port opened successfully\n";
+
         // Switch to high-speed mode
+        std::cout << "Switching to high-speed mode...\n";
         if (!m_impl->switchToHighSpeedMode()) {
+            std::cout << "Failed to switch to high-speed mode\n";
             m_impl->serialPort->close();
             m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             return false;
         }
 
         // Initialize the device
+        std::cout << "Initializing device...\n";
         if (!m_impl->initializeDevice()) {
+            std::cout << "Failed to initialize device\n";
             m_impl->serialPort->close();
             m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             return false;
@@ -219,6 +281,7 @@ namespace makcu {
         // Start monitoring thread
         m_impl->startMonitoring();
 
+        std::cout << "Device connected successfully!\n";
         return true;
     }
 
@@ -229,12 +292,14 @@ namespace makcu {
             return;
         }
 
+        std::cout << "Disconnecting device...\n";
         m_impl->stopMonitoring();
         m_impl->serialPort->close();
-        
+
         m_impl->connected = false;
         m_impl->status = ConnectionStatus::DISCONNECTED;
         m_impl->deviceInfo.isConnected = false;
+        std::cout << "Device disconnected\n";
     }
 
     bool Device::isConnected() const {
@@ -302,7 +367,8 @@ namespace makcu {
         std::ostringstream cmd;
         if (duration_ms > 0) {
             cmd << "km.press(" << static_cast<int>(key) << "," << duration_ms << ")\r";
-        } else {
+        }
+        else {
             cmd << "km.press(" << static_cast<int>(key) << ")\r";
         }
         return sendRawCommand(cmd.str());
@@ -469,7 +535,7 @@ namespace makcu {
     }
 
     std::pair<int32_t, int32_t> Device::mouseGetPosition() {
-        return {0, 0};
+        return { 0, 0 };
     }
 
     bool Device::mouseCalibrate() {
@@ -590,9 +656,9 @@ namespace makcu {
 
     KeyCode stringToKeyCode(const std::string& keyName) {
         std::string upper = keyName;
-        std::transform(upper.begin(), upper.end(), upper.begin(), 
-                      [](unsigned char c) { return std::toupper(c); });
-        
+        std::transform(upper.begin(), upper.end(), upper.begin(),
+            [](unsigned char c) { return std::toupper(c); });
+
         if (upper == "A") return KeyCode::KEY_A;
         if (upper == "B") return KeyCode::KEY_B;
         if (upper == "C") return KeyCode::KEY_C;
@@ -622,7 +688,7 @@ namespace makcu {
         if (upper == "SPACE") return KeyCode::KEY_SPACEBAR;
         if (upper == "ENTER") return KeyCode::KEY_ENTER;
         if (upper == "ESCAPE") return KeyCode::KEY_ESCAPE;
-        
+
         return KeyCode::KEY_A; // Default fallback
     }
 
@@ -637,4 +703,4 @@ namespace makcu {
         return "UNKNOWN";
     }
 
-} // namespace makcu
+} // namespace makcus
