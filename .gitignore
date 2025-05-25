@@ -34,3 +34,20 @@
 .vs/
 x64/
 makcu-cpp/x64/
+
+# Build artifacts
+build/
+*.exe
+*.pdb
+*.ilk
+*.log
+*.tlog
+*.idb
+*.suo
+*.user
+*.vcxproj.user
+
+# Test files
+basic_test.exe
+*.bmp
+*.macro
