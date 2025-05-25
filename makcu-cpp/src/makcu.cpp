@@ -33,12 +33,15 @@ namespace makcu {
         mutable std::mutex mutex;
         std::thread monitorThread;
         Device::MouseButtonCallback mouseButtonCallback;
+        std::atomic<uint8_t> currentButtonMask;
+        mutable std::mutex buttonMutex;
 
         Impl()
             : serialPort(std::make_unique<SerialPort>())
             , status(ConnectionStatus::DISCONNECTED)
             , connected(false)
             , monitoring(false)
+            , currentButtonMask(0)
         {
             deviceInfo.isConnected = false;
         }
@@ -166,18 +169,22 @@ namespace makcu {
         }
 
         bool processButtonData(uint8_t data) {
-            if (!mouseButtonCallback) {
-                return true;
-            }
+            // Store the current button mask atomically
+            currentButtonMask.store(data);
 
-            // Check each mouse button bit
-            for (int bit = 0; bit < 5; ++bit) {
-                bool isPressed = (data & (1 << bit)) != 0;
-                MouseButton button = static_cast<MouseButton>(bit);
-                mouseButtonCallback(button, isPressed);
+            if (mouseButtonCallback) {
+                for (int bit = 0; bit < 5; ++bit) {
+                    bool isPressed = (data & (1 << bit)) != 0;
+                    MouseButton button = static_cast<MouseButton>(bit);
+                    mouseButtonCallback(button, isPressed);
+                }
             }
 
             return true;
+        }
+
+        uint8_t getCurrentButtonMask() const {
+            return currentButtonMask.load();
         }
     };
 
@@ -298,6 +305,7 @@ namespace makcu {
         m_impl->connected = false;
         m_impl->status = ConnectionStatus::DISCONNECTED;
         m_impl->deviceInfo.isConnected = false;
+        m_impl->currentButtonMask.store(0);
         std::cout << "Device disconnected\n";
     }
 
@@ -623,10 +631,11 @@ namespace makcu {
     }
 
     uint8_t Device::getButtonMask() {
-        // This would need to be implemented by reading the real-time button data
-        // from the monitoring loop or by sending a specific command
-        // For now, returning 0 as placeholder
-        return 0;
+        if (!m_impl->connected) {
+            return 0;
+        }
+
+        return m_impl->getCurrentButtonMask();
     }
 
     // Mouse serial spoofing methods (v3.2 feature)
