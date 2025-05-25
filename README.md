@@ -1,44 +1,37 @@
 # MAKCU C++ Library
 
-**A professional C++ wrapper for MAKCU devices using the KMBOX B+ pro command set.**
+**A professional C++ wrapper for MAKCU mouse controllers with advanced automation capabilities.**
 
-## ⚡ Quick Start (Fixed Version)
+## Overview
 
-**If you experienced compilation errors, this version is completely rewritten and should compile cleanly!**
+The MAKCU C++ Library provides a high-level interface for controlling MAKCU mouse devices. These devices act as hardware-level mouse controllers, offering precise movement control, button automation, and advanced features like input masking and real-time monitoring.
 
-### 🔧 **Immediate Test (30 seconds)**
+## Features
 
-**Option 1: Visual Studio**
-```bash
-1. Open "makcu-basic-test.vcxproj"
-2. Press F7 to build
-3. Press F5 to run
-4. Should show "ALL BASIC TESTS PASSED"
-```
+- **Hardware-Level Mouse Control**: Direct control over mouse buttons, movement, and wheel
+- **Advanced Movement**: Instant, smooth curved, and Bezier curve movement patterns
+- **Input Masking**: Block physical mouse input while maintaining software control
+- **Real-Time Monitoring**: Live button state detection and event callbacks
+- **High-Speed Communication**: 4MHz serial communication for minimal latency
+- **Button State Management**: Comprehensive button state tracking and control
+- **Serial Spoofing**: Change device identity for compatibility (v3.2)
 
-**Option 2: Command Line**
-```bash
-1. Open "x64 Native Tools Command Prompt" for Visual Studio  
-2. Navigate to project folder
-3. Run: quick_test.bat
-4. Should compile and run successfully
-```
+## Device Compatibility
 
-### 🎯 **Expected Output**
-```
-MAKCU C++ Library - Basic Compilation Test
-==========================================
+- **Device Type**: MAKCU Mouse Controller
+- **VID/PID**: 0x1A86/0x55D3
+- **Description**: "USB-Enhanced-SERIAL CH343"
+- **Communication**: Serial over USB (115200 → 4MHz auto-switching)
+- **Platform**: Windows (Visual Studio 2019+, C++17)
 
-Testing utility functions...
-Key A as string: A
-Mouse LEFT button as string: LEFT
-Mouse button states test: PASS
+## Quick Start
 
-*** ALL BASIC TESTS PASSED ***
-The library compiled and basic functions work correctly!
-```
+### Installation
 
----
+1. Clone or download the repository
+2. Open `makcu-cpp.sln` in Visual Studio
+3. Build the project (F7)
+4. Run the example (F5)
 
 ### Basic Usage
 
@@ -48,10 +41,9 @@ The library compiled and basic functions work correctly!
 
 int main() {
     try {
-        // Create device instance
+        // Create and connect to device
         makcu::Device device;
         
-        // Find and connect to device
         std::string port = makcu::Device::findFirstDevice();
         if (port.empty()) {
             std::cout << "No MAKCU device found.\n";
@@ -59,25 +51,18 @@ int main() {
         }
         
         if (!device.connect(port)) {
-            std::cout << "Failed to connect to device.\n";
+            std::cout << "Failed to connect.\n";
             return 1;
         }
         
-        std::cout << "Connected successfully!\n";
+        std::cout << "Connected to " << port << "\n";
         
-        // Type some text
-        device.typeString("Hello from MAKCU!");
+        // Basic mouse control
+        device.mouseMove(100, 50);              // Move cursor
+        device.mouseDown(makcu::MouseButton::LEFT);   // Press left button
+        device.mouseUp(makcu::MouseButton::LEFT);     // Release left button
+        device.mouseWheel(3);                   // Scroll up
         
-        // Press Enter
-        device.keyPress(makcu::KeyCode::KEY_ENTER);
-        
-        // Move mouse cursor
-        device.mouseMove(100, 50);
-        
-        // Left click
-        device.mouseClick(makcu::MouseButton::LEFT);
-        
-        // Disconnect
         device.disconnect();
         
     } catch (const makcu::MakcuException& e) {
@@ -89,194 +74,166 @@ int main() {
 }
 ```
 
-### Real-time Input Monitoring
-
-```cpp
-#include "include/makcu.h"
-#include <iostream>
-
-void onMouseButton(makcu::MouseButton button, bool isPressed) {
-    if (isPressed) {
-        std::cout << "Mouse button " << makcu::mouseButtonToString(button) 
-                  << " pressed" << std::endl;
-    }
-}
-
-void onKeyboard(makcu::KeyCode key, bool isPressed) {
-    if (isPressed) {
-        std::cout << "Key " << makcu::keyCodeToString(key) 
-                  << " pressed" << std::endl;
-    }
-}
-
-int main() {
-    makcu::Device device;
-    
-    if (device.connect()) {
-        // Set up callbacks
-        device.setMouseButtonCallback(onMouseButton);
-        device.setKeyboardCallback(onKeyboard);
-        
-        // Monitor for 10 seconds
-        std::this_thread::sleep_for(std::chrono::seconds(10));
-        
-        device.disconnect();
-    }
-    
-    return 0;
-}
-```
-
 ## API Reference
 
 ### Device Management
 
-#### `makcu::Device`
-
-Main class for device control and automation.
-
 ```cpp
-// Construction and connection
-Device();
-~Device();
-
-// Device discovery
-static std::vector<DeviceInfo> findDevices();
-static std::string findFirstDevice();
-
-// Connection management
-bool connect(const std::string& port = "");
-void disconnect();
-bool isConnected() const;
-ConnectionStatus getStatus() const;
-
-// Device information
-DeviceInfo getDeviceInfo() const;
-std::string getVersion() const;
-std::string getSerialNumber() const;
-```
-
-### Keyboard Control
-
-```cpp
-// Basic key operations
-bool keyDown(KeyCode key);
-bool keyUp(KeyCode key);
-bool keyPress(KeyCode key, uint32_t duration_ms = 0);
-
-// Multi-key operations
-bool multiKeyDown(const std::vector<KeyCode>& keys);
-bool multiKeyUp(const std::vector<KeyCode>& keys);
-bool multiKeyPress(const std::vector<KeyCode>& keys, uint32_t duration_ms = 0);
-
-// Text input
-bool typeString(const std::string& text);
-
-// State checking
-bool isKeyDown(KeyCode key);
+class Device {
+public:
+    // Connection
+    static std::vector<DeviceInfo> findDevices();
+    static std::string findFirstDevice();
+    bool connect(const std::string& port = "");
+    void disconnect();
+    bool isConnected() const;
+    
+    // Device information
+    DeviceInfo getDeviceInfo() const;
+    std::string getVersion() const;
+    ConnectionStatus getStatus() const;
+};
 ```
 
 ### Mouse Control
 
+#### Button Operations
+
 ```cpp
-// Button operations
+// Button control
 bool mouseDown(MouseButton button);
 bool mouseUp(MouseButton button);
-bool mouseClick(MouseButton button, uint32_t count = 1);
+bool mouseButtonState(MouseButton button);  // Get current state
 
-// Movement
-bool mouseMove(int32_t x, int32_t y);         // Relative movement
-bool mouseMoveTo(int32_t x, int32_t y);       // Absolute movement
-bool mouseWheel(int32_t delta);
-
-// Advanced positioning
-bool mouseSetPosition(int32_t x, int32_t y);
-std::pair<int32_t, int32_t> mouseGetPosition();
-bool mouseCalibrate();
-bool mouseSetScreenBounds(int32_t width, int32_t height);
-
-// State monitoring
-MouseButtonStates getMouseButtonStates();
-```
-
-### Event Callbacks
-
-```cpp
-// Callback types
-using MouseButtonCallback = std::function<void(MouseButton, bool)>;
-using KeyboardCallback = std::function<void(KeyCode, bool)>;
-
-// Callback registration
-void setMouseButtonCallback(MouseButtonCallback callback);
-void setKeyboardCallback(KeyboardCallback callback);
-```
-
-### Utility Functions
-
-```cpp
-// String conversions
-std::string keyCodeToString(KeyCode key);
-KeyCode stringToKeyCode(const std::string& keyName);
-std::string mouseButtonToString(MouseButton button);
-
-// Device control
-bool delay(uint32_t milliseconds);
-bool sendRawCommand(const std::string& command);
-std::string receiveRawResponse();
-```
-
-## Key Codes
-
-The library includes comprehensive key code definitions based on the HID specification:
-
-```cpp
-// Letters
-KeyCode::KEY_A through KeyCode::KEY_Z
-
-// Numbers  
-KeyCode::KEY_1 through KeyCode::KEY_0
-
-// Function keys
-KeyCode::KEY_F1 through KeyCode::KEY_F12
-
-// Special keys
-KeyCode::KEY_ENTER, KeyCode::KEY_ESCAPE, KeyCode::KEY_SPACEBAR
-KeyCode::KEY_LEFT_CTRL, KeyCode::KEY_LEFT_ALT, KeyCode::KEY_LEFT_SHIFT
-KeyCode::KEY_ARROW_UP, KeyCode::KEY_ARROW_DOWN, etc.
-
-// And many more...
-```
-
-## Mouse Buttons
-
-```cpp
+// Supported buttons
 enum class MouseButton {
     LEFT = 0,    // Left mouse button
     RIGHT = 1,   // Right mouse button  
-    MIDDLE = 2,  // Middle mouse button (wheel click)
-    SIDE4 = 3,   // Side button 4
-    SIDE5 = 4    // Side button 5
+    MIDDLE = 2,  // Middle button (wheel click)
+    SIDE1 = 3,   // Side button 1
+    SIDE2 = 4    // Side button 2
 };
 ```
 
-## Examples
+#### Movement Control
 
-The `examples/` directory contains several demonstration programs:
+```cpp
+// Movement options
+bool mouseMove(int32_t x, int32_t y);                          // Instant movement
+bool mouseMoveSmooth(int32_t x, int32_t y, uint32_t segments); // Smooth curve
+bool mouseMoveBezier(int32_t x, int32_t y, uint32_t segments,  // Custom Bezier
+                     int32_t ctrl_x, int32_t ctrl_y);
 
-- **`mouse_monitor.cpp`**: Real-time mouse button event monitoring
-- **`keyboard_automation.cpp`**: Comprehensive keyboard automation demos
-- **`mouse_automation.cpp`**: Advanced mouse movement and control patterns
+// Mouse wheel
+bool mouseWheel(int32_t delta);  // Positive = up, negative = down
+```
 
-To build and run examples:
+#### Input Masking
 
-1. Copy the example file to your project
-2. Include the necessary headers
-3. Link against the MAKCU library
-4. Compile and run
+```cpp
+// Lock physical mouse input (software retains control)
+bool lockMouseX(bool lock = true);      // Block X-axis movement
+bool lockMouseY(bool lock = true);      // Block Y-axis movement
+bool lockMouseLeft(bool lock = true);   // Block left button
+bool lockMouseMiddle(bool lock = true); // Block middle button
+bool lockMouseRight(bool lock = true);  // Block right button
+
+// Check lock states
+bool isMouseXLocked();
+bool isMouseYLocked();
+bool isMouseLeftLocked();
+// ... etc
+```
+
+#### Input Monitoring
+
+```cpp
+// Button monitoring (v3.2 bitmask API)
+bool enableButtonMonitoring(bool enable = true);
+uint8_t getButtonMask();  // Returns bitmask of all button states
+
+// Event callbacks
+typedef std::function<void(MouseButton, bool)> MouseButtonCallback;
+void setMouseButtonCallback(MouseButtonCallback callback);
+```
+
+#### Advanced Features
+
+```cpp
+// Capture physical input (when locked)
+uint8_t catchMouseLeft();   // Get captured left button presses
+uint8_t catchMouseRight();  // Get captured right button presses
+uint8_t catchMouseMiddle(); // Get captured middle button presses
+
+// Serial spoofing (v3.2)
+std::string getMouseSerial();
+bool setMouseSerial(const std::string& serial);
+bool resetMouseSerial();
+```
+
+## Movement Patterns
+
+### Instant Movement
+
+```cpp
+device.mouseMove(100, 100);  // Move 100 pixels right and down instantly
+```
+
+### Smooth Curved Movement (v3.2)
+
+```cpp
+// Create randomized smooth curve over 20 segments (20ms duration)
+device.mouseMoveSmooth(200, 150, 20);
+```
+
+### Bezier Curve Movement (v3.2)
+
+```cpp
+// Custom Bezier curve with control point
+device.mouseMoveBezier(300, 200, 15, 150, 100);
+//                     end_x, end_y, segments, ctrl_x, ctrl_y
+```
+
+## Real-Time Monitoring
+
+```cpp
+void onMouseButton(makcu::MouseButton button, bool isPressed) {
+    std::string action = isPressed ? "PRESSED" : "RELEASED";
+    std::cout << "Button " << makcu::mouseButtonToString(button) 
+              << " " << action << std::endl;
+}
+
+int main() {
+    makcu::Device device;
+    device.connect();
+    
+    // Set up real-time monitoring
+    device.setMouseButtonCallback(onMouseButton);
+    
+    // Monitor for 10 seconds
+    std::this_thread::sleep_for(std::chrono::seconds(10));
+    
+    device.disconnect();
+    return 0;
+}
+```
+
+## Button State Bitmask
+
+The device provides a bitmask for all button states:
+
+```cpp
+uint8_t mask = device.getButtonMask();
+
+// Check individual buttons
+bool leftPressed = (mask & (1 << 0)) != 0;   // Bit 0 = Left
+bool rightPressed = (mask & (1 << 1)) != 0;  // Bit 1 = Right  
+bool middlePressed = (mask & (1 << 2)) != 0; // Bit 2 = Middle
+bool side1Pressed = (mask & (1 << 3)) != 0;  // Bit 3 = Side1
+bool side2Pressed = (mask & (1 << 4)) != 0;  // Bit 4 = Side2
+```
 
 ## Error Handling
-
-The library uses exceptions for error handling:
 
 ```cpp
 try {
@@ -291,104 +248,81 @@ try {
 }
 ```
 
-## Device Detection and Setup
+## Advanced Use Cases
 
-### Automatic Detection
-
-The library automatically detects MAKCU devices by scanning for:
-- VID: 0x1A86 (WinChipHead)
-- PID: 0x55D3 (MAKCU device identifier)
-- Device description containing "USB-Enhanced-SERIAL CH343"
-
-### Manual Port Specification
+### Gaming Automation
 
 ```cpp
-makcu::Device device;
-device.connect("COM3");  // Connect to specific port
-```
+// Precise recoil control
+device.mouseMoveSmooth(0, 10, 5);  // Smooth downward movement
 
-### COM Port Management
-
-The included COM port changer tool allows you to:
-- Change device friendly names
-- Spoof device identity for compatibility
-- Restore original device names
-
-## Communication Protocol
-
-The library handles the low-level communication protocol:
-
-1. **Initial Connection**: 115200 baud rate
-2. **Baud Rate Switch**: Automatically switches to 4MHz for high performance
-3. **Command Format**: KMBOX command set over serial
-4. **Response Parsing**: Automatic response handling and parsing
-
-## Threading Considerations
-
-The library is designed to be thread-safe:
-
-- Device operations are protected by internal mutexes
-- Callback functions are called from a dedicated monitoring thread
-- Multiple threads can safely call device methods simultaneously
-
-## Performance Notes
-
-- **High Speed Communication**: 4MHz serial communication for minimal latency
-- **Efficient Protocol**: Optimized command structure for fast execution
-- **Hardware-level Control**: Direct hardware control bypasses software limitations
-- **Real-time Monitoring**: Dedicated thread for input event processing
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Device Not Found**
-   - Ensure device is properly connected
-   - Check Device Manager for COM port assignment
-   - Verify device drivers are installed
-
-2. **Connection Failed**
-   - Try different COM ports
-   - Ensure no other applications are using the device
-   - Check device power supply
-
-3. **Commands Not Working**
-   - Verify device connection status
-   - Check for proper command syntax
-   - Ensure target application has focus
-
-### Debug Output
-
-Enable debug output by checking connection status:
-
-```cpp
-if (device.getStatus() == makcu::ConnectionStatus::ERROR) {
-    std::cout << "Connection failed" << std::endl;
+// Rapid clicking with human-like variation
+for (int i = 0; i < 10; ++i) {
+    device.mouseDown(makcu::MouseButton::LEFT);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50 + rand() % 20));
+    device.mouseUp(makcu::MouseButton::LEFT);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100 + rand() % 50));
 }
 ```
 
-## Compatibility
+### Input Isolation
 
-- **Windows**: Windows 10/11 (primary support)
-- **Visual Studio**: 2019 or later
-- **C++ Standard**: C++17 or later
-- **Architecture**: x86 and x64
+```cpp
+// Lock physical mouse, maintain software control
+device.lockMouseX(true);
+device.lockMouseY(true);
+device.lockMouseLeft(true);
+
+// Software can still move and click
+device.mouseMove(100, 100);
+device.mouseDown(makcu::MouseButton::LEFT);
+
+// Unlock when done
+device.lockMouseX(false);
+device.lockMouseY(false);
+device.lockMouseLeft(false);
+```
+
+## Troubleshooting
+
+### Device Not Found
+
+- Ensure device is connected via USB
+- Check Device Manager for COM port assignment
+- Verify device description contains "USB-Enhanced-SERIAL CH343"
+
+### Connection Failed
+
+- Try different COM ports if auto-detection fails
+- Ensure no other applications are using the device
+- Check device power and USB connection
+
+### Commands Not Working
+
+- Verify device connection with `device.isConnected()`
+- Check that target application has focus
+- Ensure proper command syntax
+
+## Technical Details
+
+- **Communication Protocol**: Custom serial protocol over USB
+- **Baud Rate**: 115200 (initial) → 4,000,000 (operational)
+- **Response Time**: Sub-millisecond command execution
+- **Threading**: Thread-safe with internal synchronization
+- **Memory**: Minimal footprint with efficient resource management
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
+GNU GPLv3 License - see LICENSE file for details.
 
 ## Support
 
 For support and questions:
-1. Check the examples directory for usage patterns
-2. Review the API documentation above
+
+1. Check the API documentation above
+2. Review the example implementation in `main.cpp`
 3. Open an issue on the project repository
 
 ## Acknowledgments
 
-Based on the KMBOX B+ pro command set and inspired by the Python implementation examples provided with MAKCU devices.
+Based on the MAKCU device command set and inspired by the Python implementation examples.
