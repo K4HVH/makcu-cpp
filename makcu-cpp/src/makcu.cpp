@@ -686,8 +686,8 @@ namespace makcu {
         case MouseButton::LEFT: return "LEFT";
         case MouseButton::RIGHT: return "RIGHT";
         case MouseButton::MIDDLE: return "MIDDLE";
-        case MouseButton::SIDE4: return "SIDE4";
-        case MouseButton::SIDE5: return "SIDE5";
+        case MouseButton::SIDE1: return "SIDE1";
+        case MouseButton::SIDE2: return "SIDE2";
         }
         return "UNKNOWN";
     }
@@ -700,8 +700,8 @@ namespace makcu {
         if (upper == "LEFT") return MouseButton::LEFT;
         if (upper == "RIGHT") return MouseButton::RIGHT;
         if (upper == "MIDDLE") return MouseButton::MIDDLE;
-        if (upper == "SIDE4") return MouseButton::SIDE4;
-        if (upper == "SIDE5") return MouseButton::SIDE5;
+        if (upper == "SIDE1") return MouseButton::SIDE1;
+        if (upper == "SIDE2") return MouseButton::SIDE2;
 
         return MouseButton::LEFT; // Default fallback
     }

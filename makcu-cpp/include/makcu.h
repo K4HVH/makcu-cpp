@@ -17,8 +17,8 @@ namespace makcu {
         LEFT = 0,
         RIGHT = 1,
         MIDDLE = 2,
-        SIDE4 = 3,
-        SIDE5 = 4
+        SIDE1 = 3,
+        SIDE2 = 4
     };
 
     // Note: MAKCU device appears to be mouse-only based on testing
@@ -43,18 +43,18 @@ namespace makcu {
         bool left;
         bool right;
         bool middle;
-        bool side4;
-        bool side5;
+        bool side1;
+        bool side2;
 
-        MouseButtonStates() : left(false), right(false), middle(false), side4(false), side5(false) {}
+        MouseButtonStates() : left(false), right(false), middle(false), side1(false), side2(false) {}
 
         bool operator[](MouseButton button) const {
             switch (button) {
             case MouseButton::LEFT: return left;
             case MouseButton::RIGHT: return right;
             case MouseButton::MIDDLE: return middle;
-            case MouseButton::SIDE4: return side4;
-            case MouseButton::SIDE5: return side5;
+            case MouseButton::SIDE1: return side1;
+            case MouseButton::SIDE2: return side2;
             }
             return false;
         }
@@ -64,8 +64,8 @@ namespace makcu {
             case MouseButton::LEFT: left = state; break;
             case MouseButton::RIGHT: right = state; break;
             case MouseButton::MIDDLE: middle = state; break;
-            case MouseButton::SIDE4: side4 = state; break;
-            case MouseButton::SIDE5: side5 = state; break;
+            case MouseButton::SIDE1: side1 = state; break;
+            case MouseButton::SIDE2: side2 = state; break;
             }
         }
     };
