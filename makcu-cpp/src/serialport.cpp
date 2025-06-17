@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <cstring>
+#include <chrono>
 
 #ifdef _WIN32
 #include <setupapi.h>
@@ -17,7 +18,7 @@ namespace makcu {
 
     SerialPort::SerialPort()
         : m_baudRate(115200)
-        , m_timeout(1000)
+        , m_timeout(100)  // Reduced from 1000ms
         , m_isOpen(false)
 #ifdef _WIN32
         , m_handle(INVALID_HANDLE_VALUE)
@@ -51,30 +52,32 @@ namespace makcu {
         m_handle = CreateFileA(
             fullPortName.c_str(),
             GENERIC_READ | GENERIC_WRITE,
-            0,                    // No sharing
-            nullptr,             // Default security
-            OPEN_EXISTING,       // Must exist
-            FILE_ATTRIBUTE_NORMAL, // Normal file
-            nullptr              // No template
+            0,
+            nullptr,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr
         );
 
         if (m_handle == INVALID_HANDLE_VALUE) {
             return false;
         }
 
-        m_isOpen = true;
-
         if (!configurePort()) {
             CloseHandle(m_handle);
             m_handle = INVALID_HANDLE_VALUE;
-            m_isOpen = false;
             return false;
         }
 
+        m_isOpen = true;
+
+        // Start high-performance listener thread
+        m_stopListener = false;
+        m_listenerThread = std::thread(&SerialPort::listenerLoop, this);
+
         return true;
 #else
-        // Linux implementation would go here
-        return false;
+        return false; // Linux implementation would go here
 #endif
     }
 
@@ -83,6 +86,27 @@ namespace makcu {
 
         if (!m_isOpen) {
             return;
+        }
+
+        // Stop listener thread
+        m_stopListener = true;
+        if (m_listenerThread.joinable()) {
+            m_listenerThread.join();
+        }
+
+        // Cancel all pending commands
+        {
+            std::lock_guard<std::mutex> cmdLock(m_commandMutex);
+            for (auto& [id, cmd] : m_pendingCommands) {
+                try {
+                    cmd->promise.set_exception(std::make_exception_ptr(
+                        std::runtime_error("Connection closed")));
+                }
+                catch (...) {
+                    // Promise already set
+                }
+            }
+            m_pendingCommands.clear();
         }
 
 #ifdef _WIN32
@@ -104,249 +128,260 @@ namespace makcu {
         return m_isOpen;
     }
 
-    bool SerialPort::setBaudRate(uint32_t baudRate) {
-        std::lock_guard<std::mutex> lock(m_mutex);
-
+    std::future<std::string> SerialPort::sendTrackedCommand(const std::string& command,
+        bool expectResponse,
+        std::chrono::milliseconds timeout) {
         if (!m_isOpen) {
-            m_baudRate = baudRate;
-            return true;
+            std::promise<std::string> promise;
+            promise.set_exception(std::make_exception_ptr(
+                std::runtime_error("Port not open")));
+            return promise.get_future();
         }
 
-        m_baudRate = baudRate;
+        int cmdId = generateCommandId();
+        auto pendingCmd = std::make_unique<PendingCommand>(cmdId, command, expectResponse, timeout);
+        auto future = pendingCmd->promise.get_future();
 
-#ifdef _WIN32
-        m_dcb.BaudRate = baudRate;
-        BOOL result = SetCommState(m_handle, &m_dcb);
-        return result != 0;
-#else
-        return false;
-#endif
-    }
-
-    uint32_t SerialPort::getBaudRate() const {
-        return m_baudRate;
-    }
-
-    std::string SerialPort::getPortName() const {
-        return m_portName;
-    }
-
-    bool SerialPort::write(const std::vector<uint8_t>& data) {
-        std::lock_guard<std::mutex> lock(m_mutex);
-
-        if (!m_isOpen || data.empty()) {
-            return false;
+        // Store pending command
+        {
+            std::lock_guard<std::mutex> lock(m_commandMutex);
+            m_pendingCommands[cmdId] = std::move(pendingCmd);
         }
+
+        // Send command with ID tracking
+        std::string trackedCommand = expectResponse ?
+            command + "#" + std::to_string(cmdId) + "\r\n" :
+            command + "\r\n";
 
 #ifdef _WIN32
         DWORD bytesWritten = 0;
-        BOOL result = WriteFile(
-            m_handle,
-            data.data(),
-            static_cast<DWORD>(data.size()),
-            &bytesWritten,
-            nullptr
-        );
+        bool success = WriteFile(m_handle, trackedCommand.c_str(),
+            static_cast<DWORD>(trackedCommand.length()),
+            &bytesWritten, nullptr);
 
-        return result && bytesWritten == data.size();
-#else
-        return false;
-#endif
-    }
-
-    bool SerialPort::write(const std::string& data) {
-        std::vector<uint8_t> bytes(data.begin(), data.end());
-        return write(bytes);
-    }
-
-    std::vector<uint8_t> SerialPort::read(size_t maxBytes) {
-        std::lock_guard<std::mutex> lock(m_mutex);
-
-        std::vector<uint8_t> buffer;
-        if (!m_isOpen || maxBytes == 0) {
-            return buffer;
+        if (!success || bytesWritten != trackedCommand.length()) {
+            std::lock_guard<std::mutex> lock(m_commandMutex);
+            auto it = m_pendingCommands.find(cmdId);
+            if (it != m_pendingCommands.end()) {
+                try {
+                    it->second->promise.set_exception(std::make_exception_ptr(
+                        std::runtime_error("Write failed")));
+                }
+                catch (...) {
+                    // Promise already set
+                }
+                m_pendingCommands.erase(it);
+            }
         }
 
-#ifdef _WIN32
-        buffer.resize(maxBytes);
-        DWORD bytesRead = 0;
-
-        BOOL result = ReadFile(
-            m_handle,
-            buffer.data(),
-            static_cast<DWORD>(maxBytes),
-            &bytesRead,
-            nullptr
-        );
-
-        if (result && bytesRead > 0) {
-            buffer.resize(bytesRead);
-        }
-        else {
-            buffer.clear();
-        }
+        FlushFileBuffers(m_handle);
 #endif
 
-        return buffer;
+        return future;
     }
 
-    std::string SerialPort::readString(size_t maxBytes) {
-        auto data = read(maxBytes);
-        return std::string(data.begin(), data.end());
-    }
-
-    bool SerialPort::writeByte(uint8_t byte) {
-        return write(std::vector<uint8_t>{byte});
-    }
-
-    bool SerialPort::readByte(uint8_t& byte) {
-        auto data = read(1);
-        if (!data.empty()) {
-            byte = data[0];
-            return true;
-        }
-        return false;
-    }
-
-    size_t SerialPort::available() const {
-        std::lock_guard<std::mutex> lock(m_mutex);
-
-        if (!m_isOpen) {
-            return 0;
-        }
-
-#ifdef _WIN32
-        COMSTAT comStat;
-        DWORD errors;
-
-        if (ClearCommError(m_handle, &errors, &comStat)) {
-            return comStat.cbInQue;
-        }
-#endif
-
-        return 0;
-    }
-
-    bool SerialPort::flush() {
-        std::lock_guard<std::mutex> lock(m_mutex);
-
+    bool SerialPort::sendCommand(const std::string& command) {
         if (!m_isOpen) {
             return false;
         }
 
+        std::string fullCommand = command + "\r\n";
+
 #ifdef _WIN32
-        return FlushFileBuffers(m_handle) != 0;
-#else
+        DWORD bytesWritten = 0;
+        bool success = WriteFile(m_handle, fullCommand.c_str(),
+            static_cast<DWORD>(fullCommand.length()),
+            &bytesWritten, nullptr);
+
+        if (success && bytesWritten == fullCommand.length()) {
+            FlushFileBuffers(m_handle);
+            return true;
+        }
+#endif
+
         return false;
-#endif
     }
 
-    void SerialPort::setTimeout(uint32_t timeoutMs) {
-        m_timeout = timeoutMs;
-        if (m_isOpen) {
-            updateTimeouts();
-        }
-    }
+    void SerialPort::listenerLoop() {
+        // Optimized read buffers
+        std::vector<uint8_t> readBuffer(BUFFER_SIZE);
+        std::vector<uint8_t> lineBuffer(LINE_BUFFER_SIZE);
+        size_t linePos = 0;
 
-    uint32_t SerialPort::getTimeout() const {
-        return m_timeout;
-    }
+        auto lastCleanup = std::chrono::steady_clock::now();
+        constexpr auto cleanupInterval = std::chrono::milliseconds(50);
 
-    std::vector<std::string> SerialPort::getAvailablePorts() {
-        std::vector<std::string> ports;
-
+        while (!m_stopListener && m_isOpen.load()) {
+            try {
 #ifdef _WIN32
-        HKEY hKey;
-        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "HARDWARE\\DEVICEMAP\\SERIALCOMM", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-            char valueName[256];
-            char data[256];
-            DWORD valueNameSize, dataSize, dataType;
-            DWORD index = 0;
+                DWORD bytesAvailable = 0;
+                COMSTAT comStat;
+                DWORD errors;
 
-            while (true) {
-                valueNameSize = sizeof(valueName);
-                dataSize = sizeof(data);
-
-                LONG result = RegEnumValueA(hKey, index++, valueName, &valueNameSize, nullptr, &dataType,
-                    reinterpret_cast<BYTE*>(data), &dataSize);
-
-                if (result == ERROR_NO_MORE_ITEMS) {
-                    break;
+                if (!ClearCommError(m_handle, &errors, &comStat)) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    continue;
                 }
 
-                if (result == ERROR_SUCCESS && dataType == REG_SZ) {
-                    ports.emplace_back(data);
+                bytesAvailable = comStat.cbInQue;
+                if (bytesAvailable == 0) {
+                    std::this_thread::sleep_for(std::chrono::microseconds(500));
+                    continue;
                 }
-            }
 
-            RegCloseKey(hKey);
-        }
-#endif
+                DWORD bytesToRead = std::min<DWORD>(bytesAvailable, static_cast<DWORD>(BUFFER_SIZE));
+                DWORD bytesRead = 0;
 
-        std::sort(ports.begin(), ports.end());
-        return ports;
-    }
+                if (!ReadFile(m_handle, readBuffer.data(), bytesToRead, &bytesRead, nullptr)) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    continue;
+                }
 
-    std::vector<std::string> SerialPort::findMakcuPorts() {
-        std::vector<std::string> makcuPorts;
+                // Process each byte efficiently
+                for (DWORD i = 0; i < bytesRead; ++i) {
+                    uint8_t byte = readBuffer[i];
 
-#ifdef _WIN32
-        // Get all available COM ports
-        auto allPorts = getAvailablePorts();
-
-        // Get device information for each port
-        HDEVINFO deviceInfoSet = SetupDiGetClassDevs(&GUID_DEVCLASS_PORTS, nullptr, nullptr, DIGCF_PRESENT);
-        if (deviceInfoSet == INVALID_HANDLE_VALUE) {
-            return makcuPorts;
-        }
-
-        SP_DEVINFO_DATA deviceInfoData;
-        deviceInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
-
-        for (DWORD i = 0; SetupDiEnumDeviceInfo(deviceInfoSet, i, &deviceInfoData); i++) {
-            char description[256] = { 0 };
-            char portName[256] = { 0 };
-
-            // Get device description
-            if (SetupDiGetDeviceRegistryPropertyA(deviceInfoSet, &deviceInfoData, SPDRP_DEVICEDESC,
-                nullptr, reinterpret_cast<BYTE*>(description), sizeof(description), nullptr)) {
-
-                std::string desc(description);
-
-                // Check if this is a MAKCU device (following the Python example)
-                if (desc.find("USB-Enhanced-SERIAL CH343") != std::string::npos ||
-                    desc.find("USB-SERIAL CH340") != std::string::npos) {
-
-                    // Get the COM port name
-                    HKEY hDeviceKey = SetupDiOpenDevRegKey(deviceInfoSet, &deviceInfoData,
-                        DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
-                    if (hDeviceKey != INVALID_HANDLE_VALUE) {
-                        DWORD portNameSize = sizeof(portName);
-
-                        if (RegQueryValueExA(hDeviceKey, "PortName", nullptr, nullptr,
-                            reinterpret_cast<BYTE*>(portName), &portNameSize) == ERROR_SUCCESS) {
-
-                            // Verify this port is in our list of available ports
-                            std::string port(portName);
-                            if (std::find(allPorts.begin(), allPorts.end(), port) != allPorts.end()) {
-                                makcuPorts.emplace_back(port);
+                    // Handle button data (non-printable characters < 32, except CR/LF)
+                    if (byte < 32 && byte != 0x0D && byte != 0x0A) {
+                        handleButtonData(byte);
+                    }
+                    else {
+                        // Handle text response data
+                        if (byte == 0x0A) { // Line feed
+                            if (linePos > 0) {
+                                std::string line(lineBuffer.begin(), lineBuffer.begin() + linePos);
+                                linePos = 0;
+                                if (!line.empty()) {
+                                    processResponse(line);
+                                }
                             }
                         }
+                        else if (byte != 0x0D) { // Ignore carriage return
+                            if (linePos < LINE_BUFFER_SIZE - 1) {
+                                lineBuffer[linePos++] = byte;
+                            }
+                        }
+                    }
+                }
+#endif
 
-                        RegCloseKey(hDeviceKey);
+                // Periodic cleanup of timed-out commands
+                auto now = std::chrono::steady_clock::now();
+                if (now - lastCleanup > cleanupInterval) {
+                    cleanupTimedOutCommands();
+                    lastCleanup = now;
+                }
+
+            }
+            catch (const std::exception&) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        }
+    }
+
+    void SerialPort::handleButtonData(uint8_t data) {
+        uint8_t lastMask = m_lastButtonMask.load();
+        if (data == lastMask) {
+            return; // No change
+        }
+
+        m_lastButtonMask.store(data);
+
+        if (m_buttonCallback) {
+            // Only process changed bits
+            uint8_t changedBits = data ^ lastMask;
+            for (int bit = 0; bit < 5; ++bit) {
+                if (changedBits & (1 << bit)) {
+                    bool isPressed = data & (1 << bit);
+                    try {
+                        m_buttonCallback(bit, isPressed);
+                    }
+                    catch (...) {
+                        // Ignore callback exceptions
                     }
                 }
             }
         }
+    }
 
-        SetupDiDestroyDeviceInfoList(deviceInfoSet);
-#endif
+    void SerialPort::processResponse(const std::string& response) {
+        // Remove ">>> " prefix if present
+        std::string content = response;
+        if (content.substr(0, 4) == ">>> ") {
+            content = content.substr(4);
+        }
 
-        // Remove duplicates and sort
-        std::sort(makcuPorts.begin(), makcuPorts.end());
-        makcuPorts.erase(std::unique(makcuPorts.begin(), makcuPorts.end()), makcuPorts.end());
+        // Check for command ID correlation
+        size_t hashPos = content.find('#');
+        if (hashPos != std::string::npos) {
+            // Extract command ID
+            std::string idStr = content.substr(hashPos + 1);
+            size_t colonPos = idStr.find(':');
+            if (colonPos != std::string::npos) {
+                try {
+                    int cmdId = std::stoi(idStr.substr(0, colonPos));
+                    std::string result = idStr.substr(colonPos + 1);
 
-        return makcuPorts;
+                    std::lock_guard<std::mutex> lock(m_commandMutex);
+                    auto it = m_pendingCommands.find(cmdId);
+                    if (it != m_pendingCommands.end()) {
+                        try {
+                            it->second->promise.set_value(result);
+                        }
+                        catch (...) {
+                            // Promise already set
+                        }
+                        m_pendingCommands.erase(it);
+                    }
+                    return;
+                }
+                catch (...) {
+                    // Failed to parse ID, treat as normal response
+                }
+            }
+        }
+
+        // Handle untracked response (oldest pending command)
+        std::lock_guard<std::mutex> lock(m_commandMutex);
+        if (!m_pendingCommands.empty()) {
+            auto it = m_pendingCommands.begin();
+            try {
+                it->second->promise.set_value(content);
+            }
+            catch (...) {
+                // Promise already set
+            }
+            m_pendingCommands.erase(it);
+        }
+    }
+
+    void SerialPort::cleanupTimedOutCommands() {
+        auto now = std::chrono::steady_clock::now();
+
+        std::lock_guard<std::mutex> lock(m_commandMutex);
+        auto it = m_pendingCommands.begin();
+        while (it != m_pendingCommands.end()) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - it->second->timestamp);
+
+            if (elapsed > it->second->timeout) {
+                try {
+                    it->second->promise.set_exception(std::make_exception_ptr(
+                        std::runtime_error("Command timeout")));
+                }
+                catch (...) {
+                    // Promise already set
+                }
+                it = m_pendingCommands.erase(it);
+            }
+            else {
+                ++it;
+            }
+        }
+    }
+
+    int SerialPort::generateCommandId() {
+        return (m_commandCounter.fetch_add(1) % 10000) + 1;
     }
 
     bool SerialPort::configurePort() {
@@ -388,15 +423,212 @@ namespace makcu {
 
     void SerialPort::updateTimeouts() {
 #ifdef _WIN32
-        // Set more aggressive timeouts for real-time communication
-        m_timeouts.ReadIntervalTimeout = 10;         // Short interval between bytes
-        m_timeouts.ReadTotalTimeoutConstant = 50;    // Short total timeout
-        m_timeouts.ReadTotalTimeoutMultiplier = 1;   // Minimal per-byte timeout
-        m_timeouts.WriteTotalTimeoutConstant = m_timeout;
-        m_timeouts.WriteTotalTimeoutMultiplier = 10;
+        // Gaming-optimized timeouts - much faster than original
+        m_timeouts.ReadIntervalTimeout = 1;          // 1ms between bytes
+        m_timeouts.ReadTotalTimeoutConstant = 10;    // 10ms total read timeout
+        m_timeouts.ReadTotalTimeoutMultiplier = 1;   // 1ms per byte
+        m_timeouts.WriteTotalTimeoutConstant = 10;   // 10ms write timeout
+        m_timeouts.WriteTotalTimeoutMultiplier = 1;  // 1ms per byte
 
         SetCommTimeouts(m_handle, &m_timeouts);
 #endif
+    }
+
+    void SerialPort::setButtonCallback(ButtonCallback callback) {
+        m_buttonCallback = callback;
+    }
+
+    // Legacy compatibility methods
+    bool SerialPort::setBaudRate(uint32_t baudRate) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (!m_isOpen) {
+            m_baudRate = baudRate;
+            return true;
+        }
+        m_baudRate = baudRate;
+#ifdef _WIN32
+        m_dcb.BaudRate = baudRate;
+        return SetCommState(m_handle, &m_dcb) != 0;
+#else
+        return false;
+#endif
+    }
+
+    uint32_t SerialPort::getBaudRate() const {
+        return m_baudRate;
+    }
+
+    std::string SerialPort::getPortName() const {
+        return m_portName;
+    }
+
+    bool SerialPort::write(const std::vector<uint8_t>& data) {
+        return sendCommand(std::string(data.begin(), data.end()));
+    }
+
+    bool SerialPort::write(const std::string& data) {
+        return sendCommand(data);
+    }
+
+    std::vector<uint8_t> SerialPort::read(size_t maxBytes) {
+        // This is a legacy method - not recommended for high performance
+        std::vector<uint8_t> buffer;
+        if (!m_isOpen || maxBytes == 0) {
+            return buffer;
+        }
+
+#ifdef _WIN32
+        buffer.resize(maxBytes);
+        DWORD bytesRead = 0;
+        bool result = ReadFile(m_handle, buffer.data(),
+            static_cast<DWORD>(maxBytes), &bytesRead, nullptr);
+        if (result && bytesRead > 0) {
+            buffer.resize(bytesRead);
+        }
+        else {
+            buffer.clear();
+        }
+#endif
+
+        return buffer;
+    }
+
+    std::string SerialPort::readString(size_t maxBytes) {
+        auto data = read(maxBytes);
+        return std::string(data.begin(), data.end());
+    }
+
+    size_t SerialPort::available() const {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (!m_isOpen) {
+            return 0;
+        }
+
+#ifdef _WIN32
+        COMSTAT comStat;
+        DWORD errors;
+        if (ClearCommError(m_handle, &errors, &comStat)) {
+            return comStat.cbInQue;
+        }
+#endif
+
+        return 0;
+    }
+
+    bool SerialPort::flush() {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (!m_isOpen) {
+            return false;
+        }
+
+#ifdef _WIN32
+        return FlushFileBuffers(m_handle) != 0;
+#else
+        return false;
+#endif
+    }
+
+    void SerialPort::setTimeout(uint32_t timeoutMs) {
+        m_timeout = timeoutMs;
+        if (m_isOpen) {
+            updateTimeouts();
+        }
+    }
+
+    uint32_t SerialPort::getTimeout() const {
+        return m_timeout;
+    }
+
+    std::vector<std::string> SerialPort::getAvailablePorts() {
+        std::vector<std::string> ports;
+
+#ifdef _WIN32
+        HKEY hKey;
+        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "HARDWARE\\DEVICEMAP\\SERIALCOMM",
+            0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+            char valueName[256];
+            char data[256];
+            DWORD valueNameSize, dataSize, dataType;
+            DWORD index = 0;
+
+            while (true) {
+                valueNameSize = sizeof(valueName);
+                dataSize = sizeof(data);
+
+                LONG result = RegEnumValueA(hKey, index++, valueName, &valueNameSize,
+                    nullptr, &dataType,
+                    reinterpret_cast<BYTE*>(data), &dataSize);
+
+                if (result == ERROR_NO_MORE_ITEMS) {
+                    break;
+                }
+
+                if (result == ERROR_SUCCESS && dataType == REG_SZ) {
+                    ports.emplace_back(data);
+                }
+            }
+
+            RegCloseKey(hKey);
+        }
+#endif
+
+        std::sort(ports.begin(), ports.end());
+        return ports;
+    }
+
+    std::vector<std::string> SerialPort::findMakcuPorts() {
+        std::vector<std::string> makcuPorts;
+
+#ifdef _WIN32
+        auto allPorts = getAvailablePorts();
+        HDEVINFO deviceInfoSet = SetupDiGetClassDevs(&GUID_DEVCLASS_PORTS,
+            nullptr, nullptr, DIGCF_PRESENT);
+        if (deviceInfoSet == INVALID_HANDLE_VALUE) {
+            return makcuPorts;
+        }
+
+        SP_DEVINFO_DATA deviceInfoData;
+        deviceInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
+
+        for (DWORD i = 0; SetupDiEnumDeviceInfo(deviceInfoSet, i, &deviceInfoData); i++) {
+            char description[256] = { 0 };
+            char portName[256] = { 0 };
+
+            if (SetupDiGetDeviceRegistryPropertyA(deviceInfoSet, &deviceInfoData,
+                SPDRP_DEVICEDESC, nullptr,
+                reinterpret_cast<BYTE*>(description),
+                sizeof(description), nullptr)) {
+                std::string desc(description);
+
+                if (desc.find("USB-Enhanced-SERIAL CH343") != std::string::npos ||
+                    desc.find("USB-SERIAL CH340") != std::string::npos) {
+
+                    HKEY hDeviceKey = SetupDiOpenDevRegKey(deviceInfoSet, &deviceInfoData,
+                        DICS_FLAG_GLOBAL, 0,
+                        DIREG_DEV, KEY_READ);
+                    if (hDeviceKey != INVALID_HANDLE_VALUE) {
+                        DWORD portNameSize = sizeof(portName);
+
+                        if (RegQueryValueExA(hDeviceKey, "PortName", nullptr, nullptr,
+                            reinterpret_cast<BYTE*>(portName),
+                            &portNameSize) == ERROR_SUCCESS) {
+                            std::string port(portName);
+                            if (std::find(allPorts.begin(), allPorts.end(), port) != allPorts.end()) {
+                                makcuPorts.emplace_back(port);
+                            }
+                        }
+                        RegCloseKey(hDeviceKey);
+                    }
+                }
+            }
+        }
+
+        SetupDiDestroyDeviceInfoList(deviceInfoSet);
+#endif
+
+        std::sort(makcuPorts.begin(), makcuPorts.end());
+        makcuPorts.erase(std::unique(makcuPorts.begin(), makcuPorts.end()), makcuPorts.end());
+        return makcuPorts;
     }
 
 } // namespace makcu

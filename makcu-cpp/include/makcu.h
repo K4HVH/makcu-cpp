@@ -6,13 +6,17 @@
 #include <functional>
 #include <cstdint>
 #include <exception>
+#include <unordered_map>
+#include <atomic>
+#include <future>
+#include <chrono>
 
 namespace makcu {
 
     // Forward declaration
     class SerialPort;
 
-    // Enums must be defined before use
+    // Enums
     enum class MouseButton : uint8_t {
         LEFT = 0,
         RIGHT = 1,
@@ -21,8 +25,6 @@ namespace makcu {
         SIDE2 = 4
     };
 
-    // Note: MAKCU device appears to be mouse-only based on testing
-    // Keyboard functionality is not supported on this device
     enum class ConnectionStatus {
         DISCONNECTED,
         CONNECTING,
@@ -93,11 +95,19 @@ namespace makcu {
         }
     };
 
-    // Main Device class - MAKCU Mouse Controller
+    class TimeoutException : public MakcuException {
+    public:
+        explicit TimeoutException(const std::string& message)
+            : MakcuException("Timeout error: " + message) {
+        }
+    };
+
+    // Main Device class - High Performance MAKCU Mouse Controller
     class Device {
     public:
         // Callback types
-        typedef std::function<void(MouseButton, bool)> MouseButtonCallback;
+        using MouseButtonCallback = std::function<void(MouseButton, bool)>;
+        using ConnectionCallback = std::function<void(bool)>;
 
         // Constructor and destructor
         Device();
@@ -107,31 +117,52 @@ namespace makcu {
         static std::vector<DeviceInfo> findDevices();
         static std::string findFirstDevice();
 
-        // Connection
+        // Connection with async support
         bool connect(const std::string& port = "");
         void disconnect();
         bool isConnected() const;
         ConnectionStatus getStatus() const;
 
+        // Async connection methods
+        std::future<bool> connectAsync(const std::string& port = "");
+        std::future<void> disconnectAsync();
+
         // Device info
         DeviceInfo getDeviceInfo() const;
         std::string getVersion() const;
+        std::future<std::string> getVersionAsync() const;
 
-        // Mouse button control
+        // High-performance mouse button control (fire-and-forget)
         bool mouseDown(MouseButton button);
         bool mouseUp(MouseButton button);
-        bool mouseButtonState(MouseButton button); // Get current state
+        bool click(MouseButton button);  // Combined press+release
 
-        // Mouse movement (enhanced v3.2 support)
-        bool mouseMove(int32_t x, int32_t y);                                    // Instant movement
-        bool mouseMoveSmooth(int32_t x, int32_t y, uint32_t segments);          // Randomized curve
+        // Async mouse button control
+        std::future<bool> mouseDownAsync(MouseButton button);
+        std::future<bool> mouseUpAsync(MouseButton button);
+        std::future<bool> clickAsync(MouseButton button);
+
+        // Mouse button state queries (with caching)
+        bool mouseButtonState(MouseButton button);
+        std::future<bool> mouseButtonStateAsync(MouseButton button);
+
+        // High-performance movement (fire-and-forget for gaming)
+        bool mouseMove(int32_t x, int32_t y);
+        bool mouseMoveSmooth(int32_t x, int32_t y, uint32_t segments);
         bool mouseMoveBezier(int32_t x, int32_t y, uint32_t segments,
-            int32_t ctrl_x, int32_t ctrl_y);                     // Controlled Bezier curve
+            int32_t ctrl_x, int32_t ctrl_y);
+
+        // Async movement
+        std::future<bool> mouseMoveAsync(int32_t x, int32_t y);
+        std::future<bool> mouseMoveSmoothAsync(int32_t x, int32_t y, uint32_t segments);
+        std::future<bool> mouseMoveBezierAsync(int32_t x, int32_t y, uint32_t segments,
+            int32_t ctrl_x, int32_t ctrl_y);
 
         // Mouse wheel
         bool mouseWheel(int32_t delta);
+        std::future<bool> mouseWheelAsync(int32_t delta);
 
-        // Mouse locking (masks physical input)
+        // Mouse locking with state caching
         bool lockMouseX(bool lock = true);
         bool lockMouseY(bool lock = true);
         bool lockMouseLeft(bool lock = true);
@@ -140,44 +171,82 @@ namespace makcu {
         bool lockMouseSide1(bool lock = true);
         bool lockMouseSide2(bool lock = true);
 
-        // Get lock states
-        bool isMouseXLocked();
-        bool isMouseYLocked();
-        bool isMouseLeftLocked();
-        bool isMouseMiddleLocked();
-        bool isMouseRightLocked();
-        bool isMouseSide1Locked();
-        bool isMouseSide2Locked();
+        // Fast lock state queries (cached)
+        bool isMouseXLocked() const;
+        bool isMouseYLocked() const;
+        bool isMouseLeftLocked() const;
+        bool isMouseMiddleLocked() const;
+        bool isMouseRightLocked() const;
+        bool isMouseSide1Locked() const;
+        bool isMouseSide2Locked() const;
 
-        // Mouse input catching (for captured physical input)
-        uint8_t catchMouseLeft();    // Returns captured left button presses
-        uint8_t catchMouseMiddle();  // Returns captured middle button presses  
-        uint8_t catchMouseRight();   // Returns captured right button presses
-        uint8_t catchMouseSide1();   // Returns captured side1 button presses
-        uint8_t catchMouseSide2();   // Returns captured side2 button presses
+        // Batch lock state query
+        std::unordered_map<std::string, bool> getAllLockStates() const;
 
-        // Button monitoring (v3.2 bitmask API)
+        // Mouse input catching
+        uint8_t catchMouseLeft();
+        uint8_t catchMouseMiddle();
+        uint8_t catchMouseRight();
+        uint8_t catchMouseSide1();
+        uint8_t catchMouseSide2();
+
+        // Button monitoring with optimized processing
         bool enableButtonMonitoring(bool enable = true);
-        bool isButtonMonitoringEnabled();
-        uint8_t getButtonMask(); // Returns bitmask of all button states
+        bool isButtonMonitoringEnabled() const;
+        uint8_t getButtonMask() const;
 
-        // Mouse serial spoofing (v3.2 feature)
-        std::string getMouseSerial();                    // Get current/original serial
-        bool setMouseSerial(const std::string& serial); // Spoof mouse serial
-        bool resetMouseSerial();                         // Reset to original
+        // Serial spoofing
+        std::string getMouseSerial();
+        bool setMouseSerial(const std::string& serial);
+        bool resetMouseSerial();
+
+        // Async serial methods
+        std::future<std::string> getMouseSerialAsync();
+        std::future<bool> setMouseSerialAsync(const std::string& serial);
 
         // Device control
         bool setBaudRate(uint32_t baudRate);
 
         // Callbacks
         void setMouseButtonCallback(MouseButtonCallback callback);
+        void setConnectionCallback(ConnectionCallback callback);
 
-        // Utility
+        // High-level automation
+        bool clickSequence(const std::vector<MouseButton>& buttons,
+            std::chrono::milliseconds delay = std::chrono::milliseconds(50));
+        bool movePattern(const std::vector<std::pair<int32_t, int32_t>>& points,
+            bool smooth = true, uint32_t segments = 10);
+
+        // Performance utilities
+        void enableHighPerformanceMode(bool enable = true);
+        bool isHighPerformanceModeEnabled() const;
+
+        // Command batching for maximum performance
+        class BatchCommandBuilder {
+        public:
+            BatchCommandBuilder& move(int32_t x, int32_t y);
+            BatchCommandBuilder& click(MouseButton button);
+            BatchCommandBuilder& press(MouseButton button);
+            BatchCommandBuilder& release(MouseButton button);
+            BatchCommandBuilder& scroll(int32_t delta);
+            bool execute();
+
+        private:
+            friend class Device;
+            BatchCommandBuilder(Device* device) : m_device(device) {}
+            Device* m_device;
+            std::vector<std::string> m_commands;
+        };
+
+        BatchCommandBuilder createBatch();
+
+        // Legacy raw command interface (not recommended for performance)
         bool sendRawCommand(const std::string& command) const;
         std::string receiveRawResponse() const;
+        std::future<std::string> sendRawCommandAsync(const std::string& command) const;
 
     private:
-        // Implementation details
+        // Implementation details with caching and optimization
         class Impl;
         std::unique_ptr<Impl> m_impl;
 
@@ -189,5 +258,37 @@ namespace makcu {
     // Utility functions
     std::string mouseButtonToString(MouseButton button);
     MouseButton stringToMouseButton(const std::string& buttonName);
+
+    // Performance profiling utilities
+    class PerformanceProfiler {
+    private:
+        static std::atomic<bool> s_enabled;
+        static std::mutex s_mutex;
+        static std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> s_stats;
+
+    public:
+        static void enableProfiling(bool enable = true) {
+            s_enabled.store(enable);
+        }
+
+        static void logCommandTiming(const std::string& command, std::chrono::microseconds duration) {
+            if (!s_enabled.load()) return;
+
+            std::lock_guard<std::mutex> lock(s_mutex);
+            auto& [count, total_us] = s_stats[command];
+            count++;
+            total_us += duration.count();
+        }
+
+        static std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> getStats() {
+            std::lock_guard<std::mutex> lock(s_mutex);
+            return s_stats;
+        }
+
+        static void resetStats() {
+            std::lock_guard<std::mutex> lock(s_mutex);
+            s_stats.clear();
+        }
+    };
 
 } // namespace makcu

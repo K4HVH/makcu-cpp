@@ -8,6 +8,7 @@
 #include <cctype>
 #include <atomic>
 #include <mutex>
+#include <unordered_map>
 
 namespace makcu {
 
@@ -20,9 +21,66 @@ namespace makcu {
     constexpr uint32_t HIGH_SPEED_BAUD_RATE = 4000000;
 
     // Baud rate change command
-    const std::vector<uint8_t> BAUD_CHANGE_COMMAND = { 0xDE, 0xAD, 0x05, 0x00, 0xA5, 0x00, 0x09, 0x3D, 0x00 };
+    const std::vector<uint8_t> BAUD_CHANGE_COMMAND = {
+        0xDE, 0xAD, 0x05, 0x00, 0xA5, 0x00, 0x09, 0x3D, 0x00
+    };
 
-    // PIMPL implementation
+    // Static member definitions for PerformanceProfiler
+    std::atomic<bool> PerformanceProfiler::s_enabled{ false };
+    std::mutex PerformanceProfiler::s_mutex;
+    std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> PerformanceProfiler::s_stats;
+
+    // Command cache for maximum performance
+    struct CommandCache {
+        // Pre-computed command strings
+        std::unordered_map<MouseButton, std::string> press_commands;
+        std::unordered_map<MouseButton, std::string> release_commands;
+        std::unordered_map<std::string, std::string> lock_commands;
+        std::unordered_map<std::string, std::string> unlock_commands;
+        std::unordered_map<std::string, std::string> query_commands;
+
+        CommandCache() {
+            // Pre-compute all button commands
+            press_commands[MouseButton::LEFT] = "km.left(1)";
+            press_commands[MouseButton::RIGHT] = "km.right(1)";
+            press_commands[MouseButton::MIDDLE] = "km.middle(1)";
+            press_commands[MouseButton::SIDE1] = "km.ms1(1)";
+            press_commands[MouseButton::SIDE2] = "km.ms2(1)";
+
+            release_commands[MouseButton::LEFT] = "km.left(0)";
+            release_commands[MouseButton::RIGHT] = "km.right(0)";
+            release_commands[MouseButton::MIDDLE] = "km.middle(0)";
+            release_commands[MouseButton::SIDE1] = "km.ms1(0)";
+            release_commands[MouseButton::SIDE2] = "km.ms2(0)";
+
+            // Pre-compute lock commands
+            lock_commands["X"] = "km.lock_mx(1)";
+            lock_commands["Y"] = "km.lock_my(1)";
+            lock_commands["LEFT"] = "km.lock_ml(1)";
+            lock_commands["RIGHT"] = "km.lock_mr(1)";
+            lock_commands["MIDDLE"] = "km.lock_mm(1)";
+            lock_commands["SIDE1"] = "km.lock_ms1(1)";
+            lock_commands["SIDE2"] = "km.lock_ms2(1)";
+
+            unlock_commands["X"] = "km.lock_mx(0)";
+            unlock_commands["Y"] = "km.lock_my(0)";
+            unlock_commands["LEFT"] = "km.lock_ml(0)";
+            unlock_commands["RIGHT"] = "km.lock_mr(0)";
+            unlock_commands["MIDDLE"] = "km.lock_mm(0)";
+            unlock_commands["SIDE1"] = "km.lock_ms1(0)";
+            unlock_commands["SIDE2"] = "km.lock_ms2(0)";
+
+            query_commands["X"] = "km.lock_mx()";
+            query_commands["Y"] = "km.lock_my()";
+            query_commands["LEFT"] = "km.lock_ml()";
+            query_commands["RIGHT"] = "km.lock_mr()";
+            query_commands["MIDDLE"] = "km.lock_mm()";
+            query_commands["SIDE1"] = "km.lock_ms1()";
+            query_commands["SIDE2"] = "km.lock_ms2()";
+        }
+    };
+
+    // High-performance PIMPL implementation
     class Device::Impl {
     public:
         std::unique_ptr<SerialPort> serialPort;
@@ -30,167 +88,197 @@ namespace makcu {
         ConnectionStatus status;
         std::atomic<bool> connected;
         std::atomic<bool> monitoring;
+        std::atomic<bool> highPerformanceMode;
         mutable std::mutex mutex;
-        std::thread monitorThread;
-        Device::MouseButtonCallback mouseButtonCallback;
-        std::atomic<uint8_t> currentButtonMask;
-        mutable std::mutex buttonMutex;
 
-        Impl()
-            : serialPort(std::make_unique<SerialPort>())
+        // Command cache for ultra-fast lookups
+        CommandCache commandCache;
+
+        // State caching with bitwise operations (like Python v2.0)
+        std::atomic<uint16_t> lockStateCache{ 0 };  // 16 bits for different lock states
+        std::atomic<bool> lockStateCacheValid{ false };
+
+        // Button state tracking
+        std::atomic<uint8_t> currentButtonMask{ 0 };
+
+        // Callbacks
+        Device::MouseButtonCallback mouseButtonCallback;
+        Device::ConnectionCallback connectionCallback;
+
+        // Pre-allocated string buffers for move commands
+        mutable std::string moveCommandBuffer;
+        mutable std::mutex moveBufferMutex;
+
+        Impl() : serialPort(std::make_unique<SerialPort>())
             , status(ConnectionStatus::DISCONNECTED)
             , connected(false)
             , monitoring(false)
-            , currentButtonMask(0)
-        {
+            , highPerformanceMode(false) {
             deviceInfo.isConnected = false;
+
+            // Set up button callback for serial port
+            serialPort->setButtonCallback([this](uint8_t button, bool pressed) {
+                handleButtonEvent(button, pressed);
+                });
         }
 
-        ~Impl() {
-            stopMonitoring();
-        }
+        ~Impl() = default;
 
         bool switchToHighSpeedMode() {
             if (!serialPort->isOpen()) {
-                std::cout << "Error: Serial port not open for baud rate switch\n";
                 return false;
             }
 
-            std::cout << "Sending baud rate change command...\n";
-
             // Send baud rate change command
             if (!serialPort->write(BAUD_CHANGE_COMMAND)) {
-                std::cout << "Error: Failed to send baud rate change command\n";
                 return false;
             }
 
             if (!serialPort->flush()) {
-                std::cout << "Error: Failed to flush after baud rate command\n";
                 return false;
             }
-
-            std::cout << "Baud rate command sent successfully\n";
 
             // Close and reopen at high speed
             std::string portName = serialPort->getPortName();
             serialPort->close();
 
-            std::cout << "Port closed, waiting before reopening...\n";
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-            std::cout << "Reopening port at " << HIGH_SPEED_BAUD_RATE << " baud...\n";
             if (!serialPort->open(portName, HIGH_SPEED_BAUD_RATE)) {
-                std::cout << "Error: Failed to reopen port at high speed\n";
                 return false;
             }
 
-            std::cout << "Successfully switched to high-speed mode\n";
             return true;
         }
 
         bool initializeDevice() {
             if (!serialPort->isOpen()) {
-                std::cout << "Error: Serial port not open for initialization\n";
                 return false;
             }
 
-            std::cout << "Initializing device...\n";
+            // Small delay for device to be ready
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-            // Wait a bit for device to be ready (like Python script does)
-            std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-
-            // Enable button monitoring
-            std::string cmd = "km.buttons(1)\r";
-            std::cout << "Sending initialization command: " << cmd;
-
-            if (!serialPort->write(cmd)) {
-                std::cout << "Error: Failed to send initialization command\n";
-                return false;
-            }
-
-            if (!serialPort->flush()) {
-                std::cout << "Error: Failed to flush after initialization\n";
-                return false;
-            }
-
-            // Wait a bit like Python script
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-            std::cout << "Device initialized successfully\n";
-            return true;
+            // Enable button monitoring - fire and forget for performance
+            return serialPort->sendCommand("km.buttons(1)");
         }
 
-        void startMonitoring() {
-            if (monitoring) {
-                return;
+        void handleButtonEvent(uint8_t button, bool pressed) {
+            // Update button mask atomically
+            uint8_t currentMask = currentButtonMask.load();
+            if (pressed) {
+                currentMask |= (1 << button);
             }
-
-            std::cout << "Starting monitoring thread...\n";
-            monitoring = true;
-            monitorThread = std::thread(&Impl::monitoringLoop, this);
-        }
-
-        void stopMonitoring() {
-            if (!monitoring) {
-                return;
+            else {
+                currentMask &= ~(1 << button);
             }
+            currentButtonMask.store(currentMask);
 
-            std::cout << "Stopping monitoring thread...\n";
-            monitoring = false;
-            if (monitorThread.joinable()) {
-                monitorThread.join();
-            }
-        }
-
-        void monitoringLoop() {
-            uint8_t lastValue = 0;
-            std::cout << "Monitoring loop started\n";
-
-            while (monitoring && connected) {
+            // Call user callback if set
+            if (mouseButtonCallback && button < 5) {
+                MouseButton mouseBtn = static_cast<MouseButton>(button);
                 try {
-                    if (serialPort->available() > 0) {
-                        uint8_t byte;
-                        if (serialPort->readByte(byte)) {
-                            if (byte != lastValue) {
-                                processButtonData(byte);
-                                lastValue = byte;
-                            }
-                        }
-                    }
+                    mouseButtonCallback(mouseBtn, pressed);
                 }
-                catch (const std::exception& e) {
-                    std::cout << "Error in monitoring loop: " << e.what() << "\n";
-                }
-
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            }
-
-            std::cout << "Monitoring loop ended\n";
-        }
-
-        bool processButtonData(uint8_t data) {
-            // Store the current button mask atomically
-            currentButtonMask.store(data);
-
-            if (mouseButtonCallback) {
-                for (int bit = 0; bit < 5; ++bit) {
-                    bool isPressed = (data & (1 << bit)) != 0;
-                    MouseButton button = static_cast<MouseButton>(bit);
-                    mouseButtonCallback(button, isPressed);
+                catch (...) {
+                    // Ignore callback exceptions
                 }
             }
-
-            return true;
         }
 
-        uint8_t getCurrentButtonMask() const {
-            return currentButtonMask.load();
+        void notifyConnectionChange(bool isConnected) {
+            if (connectionCallback) {
+                try {
+                    connectionCallback(isConnected);
+                }
+                catch (...) {
+                    // Ignore callback exceptions
+                }
+            }
+        }
+
+        // High-performance command execution
+        bool executeCommand(const std::string& command) {
+            if (!connected.load()) {
+                return false;
+            }
+
+            auto start = std::chrono::high_resolution_clock::now();
+
+            bool result;
+            if (highPerformanceMode.load()) {
+                // Fire-and-forget mode for gaming
+                result = serialPort->sendCommand(command);
+            }
+            else {
+                // Standard mode with minimal tracking
+                result = serialPort->sendCommand(command);
+            }
+
+            // Performance profiling
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+            makcu::PerformanceProfiler::logCommandTiming(command, duration);
+
+            return result;
+        }
+
+        // Optimized move command with buffer reuse
+        bool executeMoveCommand(int32_t x, int32_t y) {
+            std::lock_guard<std::mutex> lock(moveBufferMutex);
+            moveCommandBuffer.clear();
+            moveCommandBuffer.reserve(32); // Pre-allocate reasonable size
+
+            moveCommandBuffer = "km.move(";
+            moveCommandBuffer += std::to_string(x);
+            moveCommandBuffer += ",";
+            moveCommandBuffer += std::to_string(y);
+            moveCommandBuffer += ")";
+
+            return executeCommand(moveCommandBuffer);
+        }
+
+        // Cache-based lock state management
+        void updateLockStateCache(const std::string& target, bool locked) {
+            static const std::unordered_map<std::string, int> lockBitMap = {
+                {"X", 0}, {"Y", 1}, {"LEFT", 2}, {"RIGHT", 3},
+                {"MIDDLE", 4}, {"SIDE1", 5}, {"SIDE2", 6}
+            };
+
+            auto it = lockBitMap.find(target);
+            if (it != lockBitMap.end()) {
+                uint16_t cache = lockStateCache.load();
+                if (locked) {
+                    cache |= (1 << it->second);
+                }
+                else {
+                    cache &= ~(1 << it->second);
+                }
+                lockStateCache.store(cache);
+                lockStateCacheValid.store(true);
+            }
+        }
+
+        bool getLockStateFromCache(const std::string& target) const {
+            static const std::unordered_map<std::string, int> lockBitMap = {
+                {"X", 0}, {"Y", 1}, {"LEFT", 2}, {"RIGHT", 3},
+                {"MIDDLE", 4}, {"SIDE1", 5}, {"SIDE2", 6}
+            };
+
+            if (!lockStateCacheValid.load()) {
+                return false; // Cache invalid
+            }
+
+            auto it = lockBitMap.find(target);
+            if (it != lockBitMap.end()) {
+                return (lockStateCache.load() & (1 << it->second)) != 0;
+            }
+            return false;
         }
     };
 
     // Device implementation
-    Device::Device() : m_impl(std::make_unique<Impl>()) {
-    }
+    Device::Device() : m_impl(std::make_unique<Impl>()) {}
 
     Device::~Device() {
         disconnect();
@@ -200,10 +288,7 @@ namespace makcu {
         std::vector<DeviceInfo> devices;
         auto ports = SerialPort::findMakcuPorts();
 
-        std::cout << "SerialPort::findMakcuPorts() returned " << ports.size() << " ports\n";
-
         for (const auto& port : ports) {
-            std::cout << "Found MAKCU port: " << port << "\n";
             DeviceInfo info;
             info.port = port;
             info.description = TARGET_DESC;
@@ -218,57 +303,39 @@ namespace makcu {
 
     std::string Device::findFirstDevice() {
         auto devices = findDevices();
-        if (!devices.empty()) {
-            return devices[0].port;
-        }
-        return "";
+        return devices.empty() ? "" : devices[0].port;
     }
 
     bool Device::connect(const std::string& port) {
         std::lock_guard<std::mutex> lock(m_impl->mutex);
 
-        if (m_impl->connected) {
-            std::cout << "Already connected\n";
+        if (m_impl->connected.load()) {
             return true;
         }
 
-        std::string targetPort = port;
+        std::string targetPort = port.empty() ? findFirstDevice() : port;
         if (targetPort.empty()) {
-            std::cout << "No port specified, searching for device...\n";
-            targetPort = findFirstDevice();
-            if (targetPort.empty()) {
-                std::cout << "No MAKCU device found\n";
-                m_impl->status = ConnectionStatus::CONNECTION_ERROR;
-                return false;
-            }
-        }
-
-        std::cout << "Attempting to connect to " << targetPort << "\n";
-        m_impl->status = ConnectionStatus::CONNECTING;
-
-        // Try to open at initial baud rate
-        std::cout << "Opening port at " << INITIAL_BAUD_RATE << " baud...\n";
-        if (!m_impl->serialPort->open(targetPort, INITIAL_BAUD_RATE)) {
-            std::cout << "Failed to open port " << targetPort << " at " << INITIAL_BAUD_RATE << " baud\n";
             m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             return false;
         }
 
-        std::cout << "Port opened successfully\n";
+        m_impl->status = ConnectionStatus::CONNECTING;
+
+        // Open at initial baud rate
+        if (!m_impl->serialPort->open(targetPort, INITIAL_BAUD_RATE)) {
+            m_impl->status = ConnectionStatus::CONNECTION_ERROR;
+            return false;
+        }
 
         // Switch to high-speed mode
-        std::cout << "Switching to high-speed mode...\n";
         if (!m_impl->switchToHighSpeedMode()) {
-            std::cout << "Failed to switch to high-speed mode\n";
             m_impl->serialPort->close();
             m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             return false;
         }
 
-        // Initialize the device
-        std::cout << "Initializing device...\n";
+        // Initialize device
         if (!m_impl->initializeDevice()) {
-            std::cout << "Failed to initialize device\n";
             m_impl->serialPort->close();
             m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             return false;
@@ -281,36 +348,43 @@ namespace makcu {
         m_impl->deviceInfo.pid = MAKCU_PID;
         m_impl->deviceInfo.isConnected = true;
 
-        m_impl->connected = true;
+        m_impl->connected.store(true);
         m_impl->status = ConnectionStatus::CONNECTED;
+        m_impl->notifyConnectionChange(true);
 
-        // Start monitoring thread
-        m_impl->startMonitoring();
-
-        std::cout << "Device connected successfully!\n";
         return true;
+    }
+
+    std::future<bool> Device::connectAsync(const std::string& port) {
+        return std::async(std::launch::async, [this, port]() {
+            return connect(port);
+            });
     }
 
     void Device::disconnect() {
         std::lock_guard<std::mutex> lock(m_impl->mutex);
 
-        if (!m_impl->connected) {
+        if (!m_impl->connected.load()) {
             return;
         }
 
-        std::cout << "Disconnecting device...\n";
-        m_impl->stopMonitoring();
         m_impl->serialPort->close();
-
-        m_impl->connected = false;
+        m_impl->connected.store(false);
         m_impl->status = ConnectionStatus::DISCONNECTED;
         m_impl->deviceInfo.isConnected = false;
         m_impl->currentButtonMask.store(0);
-        std::cout << "Device disconnected\n";
+        m_impl->lockStateCacheValid.store(false);
+        m_impl->notifyConnectionChange(false);
+    }
+
+    std::future<void> Device::disconnectAsync() {
+        return std::async(std::launch::async, [this]() {
+            disconnect();
+            });
     }
 
     bool Device::isConnected() const {
-        return m_impl->connected;
+        return m_impl->connected.load();
     }
 
     ConnectionStatus Device::getStatus() const {
@@ -322,345 +396,438 @@ namespace makcu {
     }
 
     std::string Device::getVersion() const {
-        if (!m_impl->connected) {
+        if (!m_impl->connected.load()) {
             return "";
         }
 
-        if (sendRawCommand("km.version()\r")) {
-            return receiveRawResponse();
+        auto future = m_impl->serialPort->sendTrackedCommand("km.version()", true,
+            std::chrono::milliseconds(100));
+        try {
+            return future.get();
         }
-
-        return "";
+        catch (...) {
+            return "";
+        }
     }
 
-    // Mouse button control methods
+    std::future<std::string> Device::getVersionAsync() const {
+        return std::async(std::launch::async, [this]() {
+            return getVersion();
+            });
+    }
+
+    // High-performance mouse control methods
     bool Device::mouseDown(MouseButton button) {
-        if (!m_impl->connected) {
+        if (!m_impl->connected.load()) {
             return false;
         }
 
-        std::string cmd;
-        switch (button) {
-        case MouseButton::LEFT:   cmd = "km.left(1)\r"; break;
-        case MouseButton::RIGHT:  cmd = "km.right(1)\r"; break;
-        case MouseButton::MIDDLE: cmd = "km.middle(1)\r"; break;
-        default: return false; // Side buttons not supported based on test results
+        auto it = m_impl->commandCache.press_commands.find(button);
+        if (it != m_impl->commandCache.press_commands.end()) {
+            return m_impl->executeCommand(it->second);
         }
-        return sendRawCommand(cmd);
+        return false;
     }
 
     bool Device::mouseUp(MouseButton button) {
-        if (!m_impl->connected) {
+        if (!m_impl->connected.load()) {
             return false;
         }
 
-        std::string cmd;
-        switch (button) {
-        case MouseButton::LEFT:   cmd = "km.left(0)\r"; break;
-        case MouseButton::RIGHT:  cmd = "km.right(0)\r"; break;
-        case MouseButton::MIDDLE: cmd = "km.middle(0)\r"; break;
-        default: return false; // Side buttons not supported based on test results
+        auto it = m_impl->commandCache.release_commands.find(button);
+        if (it != m_impl->commandCache.release_commands.end()) {
+            return m_impl->executeCommand(it->second);
         }
-        return sendRawCommand(cmd);
+        return false;
+    }
+
+    bool Device::click(MouseButton button) {
+        if (!m_impl->connected.load()) {
+            return false;
+        }
+
+        // For maximum performance, batch press+release
+        auto pressIt = m_impl->commandCache.press_commands.find(button);
+        auto releaseIt = m_impl->commandCache.release_commands.find(button);
+
+        if (pressIt != m_impl->commandCache.press_commands.end() &&
+            releaseIt != m_impl->commandCache.release_commands.end()) {
+
+            bool result1 = m_impl->executeCommand(pressIt->second);
+            bool result2 = m_impl->executeCommand(releaseIt->second);
+            return result1 && result2;
+        }
+        return false;
+    }
+
+    std::future<bool> Device::mouseDownAsync(MouseButton button) {
+        return std::async(std::launch::async, [this, button]() {
+            return mouseDown(button);
+            });
+    }
+
+    std::future<bool> Device::mouseUpAsync(MouseButton button) {
+        return std::async(std::launch::async, [this, button]() {
+            return mouseUp(button);
+            });
+    }
+
+    std::future<bool> Device::clickAsync(MouseButton button) {
+        return std::async(std::launch::async, [this, button]() {
+            return click(button);
+            });
     }
 
     bool Device::mouseButtonState(MouseButton button) {
-        if (!m_impl->connected) {
+        if (!m_impl->connected.load()) {
             return false;
         }
 
-        std::string cmd;
-        switch (button) {
-        case MouseButton::LEFT:   cmd = "km.left()\r"; break;
-        case MouseButton::RIGHT:  cmd = "km.right()\r"; break;
-        case MouseButton::MIDDLE: cmd = "km.middle()\r"; break;
-        default: return false; // Side buttons not supported based on test results
-        }
-
-        if (sendRawCommand(cmd)) {
-            auto response = receiveRawResponse();
-            return response.find("1") != std::string::npos;
-        }
-        return false;
+        // Use cached button state for performance
+        uint8_t mask = m_impl->currentButtonMask.load();
+        return (mask & (1 << static_cast<uint8_t>(button))) != 0;
     }
 
-    // Mouse movement methods (v3.2 enhanced support)
+    std::future<bool> Device::mouseButtonStateAsync(MouseButton button) {
+        return std::async(std::launch::async, [this, button]() {
+            return mouseButtonState(button);
+            });
+    }
+
+    // High-performance movement methods
     bool Device::mouseMove(int32_t x, int32_t y) {
-        if (!m_impl->connected) {
+        if (!m_impl->connected.load()) {
             return false;
         }
 
-        std::ostringstream cmd;
-        cmd << "km.move(" << x << "," << y << ")\r";
-        return sendRawCommand(cmd.str());
+        return m_impl->executeMoveCommand(x, y);
     }
 
     bool Device::mouseMoveSmooth(int32_t x, int32_t y, uint32_t segments) {
-        if (!m_impl->connected) {
+        if (!m_impl->connected.load()) {
             return false;
         }
 
-        std::ostringstream cmd;
-        cmd << "km.move(" << x << "," << y << "," << segments << ")\r";
-        return sendRawCommand(cmd.str());
+        std::string command = "km.move(" + std::to_string(x) + "," +
+            std::to_string(y) + "," + std::to_string(segments) + ")";
+        return m_impl->executeCommand(command);
     }
 
-    bool Device::mouseMoveBezier(int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x, int32_t ctrl_y) {
-        if (!m_impl->connected) {
+    bool Device::mouseMoveBezier(int32_t x, int32_t y, uint32_t segments,
+        int32_t ctrl_x, int32_t ctrl_y) {
+        if (!m_impl->connected.load()) {
             return false;
         }
 
-        std::ostringstream cmd;
-        cmd << "km.move(" << x << "," << y << "," << segments << "," << ctrl_x << "," << ctrl_y << ")\r";
-        return sendRawCommand(cmd.str());
+        std::string command = "km.move(" + std::to_string(x) + "," + std::to_string(y) + "," +
+            std::to_string(segments) + "," + std::to_string(ctrl_x) + "," +
+            std::to_string(ctrl_y) + ")";
+        return m_impl->executeCommand(command);
+    }
+
+    std::future<bool> Device::mouseMoveAsync(int32_t x, int32_t y) {
+        return std::async(std::launch::async, [this, x, y]() {
+            return mouseMove(x, y);
+            });
+    }
+
+    std::future<bool> Device::mouseMoveSmoothAsync(int32_t x, int32_t y, uint32_t segments) {
+        return std::async(std::launch::async, [this, x, y, segments]() {
+            return mouseMoveSmooth(x, y, segments);
+            });
+    }
+
+    std::future<bool> Device::mouseMoveBezierAsync(int32_t x, int32_t y, uint32_t segments,
+        int32_t ctrl_x, int32_t ctrl_y) {
+        return std::async(std::launch::async, [this, x, y, segments, ctrl_x, ctrl_y]() {
+            return mouseMoveBezier(x, y, segments, ctrl_x, ctrl_y);
+            });
     }
 
     bool Device::mouseWheel(int32_t delta) {
-        if (!m_impl->connected) {
+        if (!m_impl->connected.load()) {
             return false;
         }
 
-        std::ostringstream cmd;
-        cmd << "km.wheel(" << delta << ")\r";
-        return sendRawCommand(cmd.str());
+        std::string command = "km.wheel(" + std::to_string(delta) + ")";
+        return m_impl->executeCommand(command);
     }
 
-    // Mouse locking methods
+    std::future<bool> Device::mouseWheelAsync(int32_t delta) {
+        return std::async(std::launch::async, [this, delta]() {
+            return mouseWheel(delta);
+            });
+    }
+
+    // Mouse locking methods with caching
     bool Device::lockMouseX(bool lock) {
-        if (!m_impl->connected) return false;
-        std::ostringstream cmd;
-        cmd << "km.lock_mx(" << (lock ? 1 : 0) << ")\r";
-        return sendRawCommand(cmd.str());
+        if (!m_impl->connected.load()) return false;
+
+        const std::string& command = lock ?
+            m_impl->commandCache.lock_commands.at("X") :
+            m_impl->commandCache.unlock_commands.at("X");
+
+        bool result = m_impl->executeCommand(command);
+        if (result) {
+            m_impl->updateLockStateCache("X", lock);
+        }
+        return result;
     }
 
     bool Device::lockMouseY(bool lock) {
-        if (!m_impl->connected) return false;
-        std::ostringstream cmd;
-        cmd << "km.lock_my(" << (lock ? 1 : 0) << ")\r";
-        return sendRawCommand(cmd.str());
+        if (!m_impl->connected.load()) return false;
+
+        const std::string& command = lock ?
+            m_impl->commandCache.lock_commands.at("Y") :
+            m_impl->commandCache.unlock_commands.at("Y");
+
+        bool result = m_impl->executeCommand(command);
+        if (result) {
+            m_impl->updateLockStateCache("Y", lock);
+        }
+        return result;
     }
 
     bool Device::lockMouseLeft(bool lock) {
-        if (!m_impl->connected) return false;
-        std::ostringstream cmd;
-        cmd << "km.lock_ml(" << (lock ? 1 : 0) << ")\r";
-        return sendRawCommand(cmd.str());
+        if (!m_impl->connected.load()) return false;
+
+        const std::string& command = lock ?
+            m_impl->commandCache.lock_commands.at("LEFT") :
+            m_impl->commandCache.unlock_commands.at("LEFT");
+
+        bool result = m_impl->executeCommand(command);
+        if (result) {
+            m_impl->updateLockStateCache("LEFT", lock);
+        }
+        return result;
     }
 
     bool Device::lockMouseMiddle(bool lock) {
-        if (!m_impl->connected) return false;
-        std::ostringstream cmd;
-        cmd << "km.lock_mm(" << (lock ? 1 : 0) << ")\r";
-        return sendRawCommand(cmd.str());
+        if (!m_impl->connected.load()) return false;
+
+        const std::string& command = lock ?
+            m_impl->commandCache.lock_commands.at("MIDDLE") :
+            m_impl->commandCache.unlock_commands.at("MIDDLE");
+
+        bool result = m_impl->executeCommand(command);
+        if (result) {
+            m_impl->updateLockStateCache("MIDDLE", lock);
+        }
+        return result;
     }
 
     bool Device::lockMouseRight(bool lock) {
-        if (!m_impl->connected) return false;
-        std::ostringstream cmd;
-        cmd << "km.lock_mr(" << (lock ? 1 : 0) << ")\r";
-        return sendRawCommand(cmd.str());
+        if (!m_impl->connected.load()) return false;
+
+        const std::string& command = lock ?
+            m_impl->commandCache.lock_commands.at("RIGHT") :
+            m_impl->commandCache.unlock_commands.at("RIGHT");
+
+        bool result = m_impl->executeCommand(command);
+        if (result) {
+            m_impl->updateLockStateCache("RIGHT", lock);
+        }
+        return result;
     }
 
     bool Device::lockMouseSide1(bool lock) {
-        if (!m_impl->connected) return false;
-        std::ostringstream cmd;
-        cmd << "km.lock_ms1(" << (lock ? 1 : 0) << ")\r";
-        return sendRawCommand(cmd.str());
+        if (!m_impl->connected.load()) return false;
+
+        const std::string& command = lock ?
+            m_impl->commandCache.lock_commands.at("SIDE1") :
+            m_impl->commandCache.unlock_commands.at("SIDE1");
+
+        bool result = m_impl->executeCommand(command);
+        if (result) {
+            m_impl->updateLockStateCache("SIDE1", lock);
+        }
+        return result;
     }
 
     bool Device::lockMouseSide2(bool lock) {
-        if (!m_impl->connected) return false;
-        std::ostringstream cmd;
-        cmd << "km.lock_ms2(" << (lock ? 1 : 0) << ")\r";
-        return sendRawCommand(cmd.str());
+        if (!m_impl->connected.load()) return false;
+
+        const std::string& command = lock ?
+            m_impl->commandCache.lock_commands.at("SIDE2") :
+            m_impl->commandCache.unlock_commands.at("SIDE2");
+
+        bool result = m_impl->executeCommand(command);
+        if (result) {
+            m_impl->updateLockStateCache("SIDE2", lock);
+        }
+        return result;
     }
 
-    // Get lock states
-    bool Device::isMouseXLocked() {
-        if (!m_impl->connected) return false;
-        if (sendRawCommand("km.lock_mx()\r")) {
-            auto response = receiveRawResponse();
-            return response.find("1") != std::string::npos;
-        }
-        return false;
+    // Fast cached lock state queries
+    bool Device::isMouseXLocked() const {
+        return m_impl->getLockStateFromCache("X");
     }
 
-    bool Device::isMouseYLocked() {
-        if (!m_impl->connected) return false;
-        if (sendRawCommand("km.lock_my()\r")) {
-            auto response = receiveRawResponse();
-            return response.find("1") != std::string::npos;
-        }
-        return false;
+    bool Device::isMouseYLocked() const {
+        return m_impl->getLockStateFromCache("Y");
     }
 
-    bool Device::isMouseLeftLocked() {
-        if (!m_impl->connected) return false;
-        if (sendRawCommand("km.lock_ml()\r")) {
-            auto response = receiveRawResponse();
-            return response.find("1") != std::string::npos;
-        }
-        return false;
+    bool Device::isMouseLeftLocked() const {
+        return m_impl->getLockStateFromCache("LEFT");
     }
 
-    bool Device::isMouseMiddleLocked() {
-        if (!m_impl->connected) return false;
-        if (sendRawCommand("km.lock_mm()\r")) {
-            auto response = receiveRawResponse();
-            return response.find("1") != std::string::npos;
-        }
-        return false;
+    bool Device::isMouseMiddleLocked() const {
+        return m_impl->getLockStateFromCache("MIDDLE");
     }
 
-    bool Device::isMouseRightLocked() {
-        if (!m_impl->connected) return false;
-        if (sendRawCommand("km.lock_mr()\r")) {
-            auto response = receiveRawResponse();
-            return response.find("1") != std::string::npos;
-        }
-        return false;
+    bool Device::isMouseRightLocked() const {
+        return m_impl->getLockStateFromCache("RIGHT");
     }
 
-    bool Device::isMouseSide1Locked() {
-        if (!m_impl->connected) return false;
-        if (sendRawCommand("km.lock_ms1()\r")) {
-            auto response = receiveRawResponse();
-            return response.find("1") != std::string::npos;
-        }
-        return false;
+    bool Device::isMouseSide1Locked() const {
+        return m_impl->getLockStateFromCache("SIDE1");
     }
 
-    bool Device::isMouseSide2Locked() {
-        if (!m_impl->connected) return false;
-        if (sendRawCommand("km.lock_ms2()\r")) {
-            auto response = receiveRawResponse();
-            return response.find("1") != std::string::npos;
-        }
-        return false;
+    bool Device::isMouseSide2Locked() const {
+        return m_impl->getLockStateFromCache("SIDE2");
+    }
+
+    std::unordered_map<std::string, bool> Device::getAllLockStates() const {
+        return {
+            {"X", isMouseXLocked()},
+            {"Y", isMouseYLocked()},
+            {"LEFT", isMouseLeftLocked()},
+            {"RIGHT", isMouseRightLocked()},
+            {"MIDDLE", isMouseMiddleLocked()},
+            {"SIDE1", isMouseSide1Locked()},
+            {"SIDE2", isMouseSide2Locked()}
+        };
     }
 
     // Mouse input catching methods
     uint8_t Device::catchMouseLeft() {
-        if (!m_impl->connected) return 0;
-        if (sendRawCommand("km.catch_ml()\r")) {
-            auto response = receiveRawResponse();
-            try {
-                return static_cast<uint8_t>(std::stoi(response));
-            }
-            catch (...) {
-                return 0;
-            }
+        if (!m_impl->connected.load()) return 0;
+
+        auto future = m_impl->serialPort->sendTrackedCommand("km.catch_ml()", true,
+            std::chrono::milliseconds(50));
+        try {
+            std::string response = future.get();
+            return static_cast<uint8_t>(std::stoi(response));
         }
-        return 0;
+        catch (...) {
+            return 0;
+        }
     }
 
     uint8_t Device::catchMouseMiddle() {
-        if (!m_impl->connected) return 0;
-        if (sendRawCommand("km.catch_mm()\r")) {
-            auto response = receiveRawResponse();
-            try {
-                return static_cast<uint8_t>(std::stoi(response));
-            }
-            catch (...) {
-                return 0;
-            }
+        if (!m_impl->connected.load()) return 0;
+
+        auto future = m_impl->serialPort->sendTrackedCommand("km.catch_mm()", true,
+            std::chrono::milliseconds(50));
+        try {
+            std::string response = future.get();
+            return static_cast<uint8_t>(std::stoi(response));
         }
-        return 0;
+        catch (...) {
+            return 0;
+        }
     }
 
     uint8_t Device::catchMouseRight() {
-        if (!m_impl->connected) return 0;
-        if (sendRawCommand("km.catch_mr()\r")) {
-            auto response = receiveRawResponse();
-            try {
-                return static_cast<uint8_t>(std::stoi(response));
-            }
-            catch (...) {
-                return 0;
-            }
+        if (!m_impl->connected.load()) return 0;
+
+        auto future = m_impl->serialPort->sendTrackedCommand("km.catch_mr()", true,
+            std::chrono::milliseconds(50));
+        try {
+            std::string response = future.get();
+            return static_cast<uint8_t>(std::stoi(response));
         }
-        return 0;
+        catch (...) {
+            return 0;
+        }
     }
 
     uint8_t Device::catchMouseSide1() {
-        if (!m_impl->connected) return 0;
-        if (sendRawCommand("km.catch_ms1()\r")) {
-            auto response = receiveRawResponse();
-            try {
-                return static_cast<uint8_t>(std::stoi(response));
-            }
-            catch (...) {
-                return 0;
-            }
+        if (!m_impl->connected.load()) return 0;
+
+        auto future = m_impl->serialPort->sendTrackedCommand("km.catch_ms1()", true,
+            std::chrono::milliseconds(50));
+        try {
+            std::string response = future.get();
+            return static_cast<uint8_t>(std::stoi(response));
         }
-        return 0;
+        catch (...) {
+            return 0;
+        }
     }
 
     uint8_t Device::catchMouseSide2() {
-        if (!m_impl->connected) return 0;
-        if (sendRawCommand("km.catch_ms2()\r")) {
-            auto response = receiveRawResponse();
-            try {
-                return static_cast<uint8_t>(std::stoi(response));
-            }
-            catch (...) {
-                return 0;
-            }
+        if (!m_impl->connected.load()) return 0;
+
+        auto future = m_impl->serialPort->sendTrackedCommand("km.catch_ms2()", true,
+            std::chrono::milliseconds(50));
+        try {
+            std::string response = future.get();
+            return static_cast<uint8_t>(std::stoi(response));
         }
-        return 0;
+        catch (...) {
+            return 0;
+        }
     }
 
-    // Button monitoring methods (v3.2 bitmask API)
+    // Button monitoring methods
     bool Device::enableButtonMonitoring(bool enable) {
-        if (!m_impl->connected) {
+        if (!m_impl->connected.load()) {
             return false;
         }
 
-        std::ostringstream cmd;
-        cmd << "km.buttons(" << (enable ? 1 : 0) << ")\r";
-        return sendRawCommand(cmd.str());
+        std::string command = enable ? "km.buttons(1)" : "km.buttons(0)";
+        return m_impl->executeCommand(command);
     }
 
-    bool Device::isButtonMonitoringEnabled() {
-        if (!m_impl->connected) return false;
-        if (sendRawCommand("km.buttons()\r")) {
-            auto response = receiveRawResponse();
-            return response.find("1") != std::string::npos;
-        }
-        return false;
+    bool Device::isButtonMonitoringEnabled() const {
+        return m_impl->monitoring.load();
     }
 
-    uint8_t Device::getButtonMask() {
-        if (!m_impl->connected) {
-            return 0;
-        }
-
-        return m_impl->getCurrentButtonMask();
+    uint8_t Device::getButtonMask() const {
+        return m_impl->currentButtonMask.load();
     }
 
-    // Mouse serial spoofing methods (v3.2 feature)
+    // Serial spoofing methods
     std::string Device::getMouseSerial() {
-        if (!m_impl->connected) return "";
-        if (sendRawCommand("km.serial()\r")) {
-            return receiveRawResponse();
+        if (!m_impl->connected.load()) return "";
+
+        auto future = m_impl->serialPort->sendTrackedCommand("km.serial()", true,
+            std::chrono::milliseconds(100));
+        try {
+            return future.get();
         }
-        return "";
+        catch (...) {
+            return "";
+        }
     }
 
     bool Device::setMouseSerial(const std::string& serial) {
-        if (!m_impl->connected) return false;
-        std::ostringstream cmd;
-        cmd << "km.serial('" << serial << "')\r";
-        return sendRawCommand(cmd.str());
+        if (!m_impl->connected.load()) return false;
+
+        std::string command = "km.serial('" + serial + "')";
+        return m_impl->executeCommand(command);
     }
 
     bool Device::resetMouseSerial() {
-        if (!m_impl->connected) return false;
-        return sendRawCommand("km.serial(0)\r");
+        if (!m_impl->connected.load()) return false;
+        return m_impl->executeCommand("km.serial(0)");
+    }
+
+    std::future<std::string> Device::getMouseSerialAsync() {
+        return std::async(std::launch::async, [this]() {
+            return getMouseSerial();
+            });
+    }
+
+    std::future<bool> Device::setMouseSerialAsync(const std::string& serial) {
+        return std::async(std::launch::async, [this, serial]() {
+            return setMouseSerial(serial);
+            });
     }
 
     bool Device::setBaudRate(uint32_t baudRate) {
-        if (!m_impl->connected) {
+        if (!m_impl->connected.load()) {
             return false;
         }
 
@@ -671,22 +838,140 @@ namespace makcu {
         m_impl->mouseButtonCallback = callback;
     }
 
-    bool Device::sendRawCommand(const std::string& command) const {
-        if (!m_impl->connected) {
+    void Device::setConnectionCallback(ConnectionCallback callback) {
+        m_impl->connectionCallback = callback;
+    }
+
+    // High-level automation methods
+    bool Device::clickSequence(const std::vector<MouseButton>& buttons,
+        std::chrono::milliseconds delay) {
+        if (!m_impl->connected.load()) {
             return false;
         }
 
-        return m_impl->serialPort->write(command);
+        for (const auto& button : buttons) {
+            if (!click(button)) {
+                return false;
+            }
+            if (delay.count() > 0) {
+                std::this_thread::sleep_for(delay);
+            }
+        }
+        return true;
+    }
+
+    bool Device::movePattern(const std::vector<std::pair<int32_t, int32_t>>& points,
+        bool smooth, uint32_t segments) {
+        if (!m_impl->connected.load()) {
+            return false;
+        }
+
+        for (const auto& [x, y] : points) {
+            if (smooth) {
+                if (!mouseMoveSmooth(x, y, segments)) {
+                    return false;
+                }
+            }
+            else {
+                if (!mouseMove(x, y)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    void Device::enableHighPerformanceMode(bool enable) {
+        m_impl->highPerformanceMode.store(enable);
+    }
+
+    bool Device::isHighPerformanceModeEnabled() const {
+        return m_impl->highPerformanceMode.load();
+    }
+
+    // Batch command builder implementation
+    Device::BatchCommandBuilder Device::createBatch() {
+        return BatchCommandBuilder(this);
+    }
+
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::move(int32_t x, int32_t y) {
+        m_commands.push_back("km.move(" + std::to_string(x) + "," + std::to_string(y) + ")");
+        return *this;
+    }
+
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::click(MouseButton button) {
+        auto& cache = m_device->m_impl->commandCache;
+        auto pressIt = cache.press_commands.find(button);
+        auto releaseIt = cache.release_commands.find(button);
+
+        if (pressIt != cache.press_commands.end() && releaseIt != cache.release_commands.end()) {
+            m_commands.push_back(pressIt->second);
+            m_commands.push_back(releaseIt->second);
+        }
+        return *this;
+    }
+
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::press(MouseButton button) {
+        auto& cache = m_device->m_impl->commandCache;
+        auto it = cache.press_commands.find(button);
+        if (it != cache.press_commands.end()) {
+            m_commands.push_back(it->second);
+        }
+        return *this;
+    }
+
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::release(MouseButton button) {
+        auto& cache = m_device->m_impl->commandCache;
+        auto it = cache.release_commands.find(button);
+        if (it != cache.release_commands.end()) {
+            m_commands.push_back(it->second);
+        }
+        return *this;
+    }
+
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::scroll(int32_t delta) {
+        m_commands.push_back("km.wheel(" + std::to_string(delta) + ")");
+        return *this;
+    }
+
+    bool Device::BatchCommandBuilder::execute() {
+        if (!m_device->m_impl->connected.load()) {
+            return false;
+        }
+
+        for (const auto& command : m_commands) {
+            if (!m_device->m_impl->executeCommand(command)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Legacy raw command interface (not recommended)
+    bool Device::sendRawCommand(const std::string& command) const {
+        if (!m_impl->connected.load()) {
+            return false;
+        }
+
+        return m_impl->serialPort->sendCommand(command);
     }
 
     std::string Device::receiveRawResponse() const {
-        if (!m_impl->connected) {
-            return "";
+        // This method is deprecated and not recommended for performance
+        // Use async methods instead
+        return "";
+    }
+
+    std::future<std::string> Device::sendRawCommandAsync(const std::string& command) const {
+        if (!m_impl->connected.load()) {
+            std::promise<std::string> promise;
+            promise.set_exception(std::make_exception_ptr(
+                std::runtime_error("Not connected")));
+            return promise.get_future();
         }
 
-        // Wait a bit for response
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        return m_impl->serialPort->readString(1024);
+        return m_impl->serialPort->sendTrackedCommand(command, true,
+            std::chrono::milliseconds(100));
     }
 
     // Utility functions
