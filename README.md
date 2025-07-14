@@ -80,8 +80,8 @@ Smooth/Bezier moves:  350-770μs (0.35-0.77ms)
 ### Reproduce These Results
 
 ```bash
-git clone https://github.com/your-repo/makcu-cpp-ultra-performance
-cd makcu-cpp-ultra-performance
+git clone https://github.com/k4hvh/makcu-cpp
+cd makcu-cpp
 # Open makcu-cpp.sln in Visual Studio
 # Build in Release mode (F7)
 # Run the demo (F5)
@@ -112,8 +112,8 @@ cd makcu-cpp-ultra-performance
 ### Build Instructions
 
 ```bash
-git clone https://github.com/your-repo/makcu-cpp-high-performance
-cd makcu-cpp-high-performance
+git clone https://github.com/your-repo/makcu-cpp
+cd makcu-cpp
 # Open makcu-cpp.sln in Visual Studio
 # Build solution (F7)
 # Run demo (F5)
