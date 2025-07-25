@@ -104,16 +104,6 @@ sudo usermod -a -G dialout $USER
 # Log out and back in for changes to take effect
 ```
 
-**Installation:**
-
-```bash
-cd build
-sudo make install  # System-wide installation
-# Or create packages:
-# cpack -G DEB && sudo dpkg -i makcu-cpp-*.deb
-# cpack -G RPM && sudo rpm -i makcu-cpp-*.rpm
-```
-
 ## 🔥 Quick Start - High Performance
 
 ### Basic Gaming Setup

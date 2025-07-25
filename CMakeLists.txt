@@ -75,26 +75,6 @@ install(FILES ${HEADERS}
     DESTINATION include/makcu
 )
 
-# Create a library version as well
-add_library(makcu STATIC 
-    makcu-cpp/src/makcu.cpp
-    makcu-cpp/src/serialport.cpp
-)
-
-target_link_libraries(makcu PRIVATE Threads::Threads)
-
-if(WIN32)
-    target_link_libraries(makcu PRIVATE setupapi)
-elseif(UNIX AND NOT APPLE)
-    target_link_libraries(makcu PRIVATE ${UDEV_LIBRARIES})
-    target_include_directories(makcu PRIVATE ${UDEV_INCLUDE_DIRS})
-    target_compile_options(makcu PRIVATE ${UDEV_CFLAGS_OTHER})
-endif()
-
-install(TARGETS makcu
-    ARCHIVE DESTINATION lib
-)
-
 # Package configuration
 set(CPACK_PACKAGE_NAME "makcu-cpp")
 set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
