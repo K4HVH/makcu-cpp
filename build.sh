@@ -61,7 +61,6 @@ make -j$(nproc)
 
 echo -e "${GREEN}=== Build completed successfully! ===${NC}"
 echo -e "${BLUE}Executable location: ${PWD}/bin/makcu-cpp${NC}"
-echo -e "${BLUE}Library location: ${PWD}/libmakcu.a${NC}"
 
 # Test if the executable was created
 if [ -f "bin/makcu-cpp" ]; then
@@ -71,16 +70,6 @@ else
     exit 1
 fi
 
-if [ -f "libmakcu.a" ]; then
-    echo -e "${GREEN}✓ Static library built successfully${NC}"
-else
-    echo -e "${RED}✗ Static library not found${NC}"
-    exit 1
-fi
-
 echo ""
 echo -e "${BLUE}To run the demo:${NC}"
 echo -e "${YELLOW}cd build && ./bin/makcu-cpp${NC}"
-echo ""
-echo -e "${BLUE}To install system-wide:${NC}"
-echo -e "${YELLOW}sudo make install${NC}"
