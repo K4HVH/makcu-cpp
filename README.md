@@ -24,24 +24,6 @@
 | Batch Commands (9 ops) | 3ms | **<0.1ms** | **30x+ faster** | Both suitable for macros |
 | Async Operations (5 ops) | 2ms | **0.2ms** | **10x faster** | Both support parallelism |
 
-### Performance Context
-
-**makcu-py-lib v2.0** is an excellent Python library that achieved remarkable optimization:
-
-- ✅ 17x faster than earlier versions
-- ✅ Zero-delay architecture  
-- ✅ Perfect for 144-240Hz gaming
-- ✅ Modern async/await support
-- ✅ Easy to use and well-documented
-
-**This C++ implementation** builds on those same optimization principles:
-
-- ✅ Compiled code performance advantages
-- ✅ Similar zero-delay architecture
-- ✅ Extended performance envelope  
-- ✅ Async support with std::future
-- ✅ Compatible API design
-
 ### Real-World Test Results
 
 ``` txt
@@ -58,58 +40,25 @@ Wheel commands:       48-59μs   (0.048-0.059ms)
 Smooth/Bezier moves:  350-770μs (0.35-0.77ms)
 ```
 
-## 🎯 Gaming Performance Verification
-
-✅ **360Hz Gaming**: 2.8ms frame time — **EXCEEDED** (avg 0.06-0.2ms)  
-✅ **240Hz Gaming**: 4.2ms frame time — **EASILY EXCEEDED** (avg 0.06-0.2ms)  
-✅ **144Hz Gaming**: 7ms frame time — **EASILY EXCEEDED** (avg 0.06-0.2ms)
-
-**Verdict: This C++ implementation is ready for ANY gaming scenario, including theoretical 1000Hz+ displays!**
-
-## 🔬 Performance Verification
-
-**These results are REAL and reproducible!**
-
-### Test Environment
-
-- **Hardware**: Windows 11, USB-Enhanced-SERIAL CH343
-- **Port**: COM8 at 4MHz baud rate  
-- **Compiler**: Visual Studio 2022 with /O2 optimization
-- **Test Date**: Live measurements from actual hardware
-
-### Reproduce These Results
-
-```bash
-git clone https://github.com/k4hvh/makcu-cpp
-cd makcu-cpp
-# Open makcu-cpp.sln in Visual Studio
-# Build in Release mode (F7)
-# Run the demo (F5)
-```
-
-**You will see output like:**
-
-``` txt
-=== PERFORMANCE TEST ===
-1. Testing rapid mouse movements (100 commands)...
-   100 movements: 7ms (0.07ms avg)
-2. Testing rapid clicking (50 clicks)...
-   50 clicks: 8ms (0.16ms avg)
-3. Testing batch operations...
-   Batch (9 commands): 0ms
-4. Testing async operations...
-   5 async operations: 1ms
-```
-
----
-
 ### Prerequisites
 
+#### Windows
+
 - **Visual Studio 2019+** with C++17 support
-- **Windows 10/11** (Linux support planned)
+- **Windows 10/11**
+- **MAKCU Device** (VID:PID = 1A86:55D3)
+
+#### Linux
+
+- **GCC 7+ or Clang 6+** with C++17 support
+- **CMake 3.15+**
+- **libudev development files** (`libudev-dev` on Ubuntu/Debian)
+- **pkg-config**
 - **MAKCU Device** (VID:PID = 1A86:55D3)
 
 ### Build Instructions
+
+#### Windows (Visual Studio)
 
 ```bash
 git clone https://github.com/your-repo/makcu-cpp
@@ -117,6 +66,52 @@ cd makcu-cpp
 # Open makcu-cpp.sln in Visual Studio
 # Build solution (F7)
 # Run demo (F5)
+```
+
+#### Linux (CMake)
+
+**Prerequisites:**
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install build-essential cmake pkg-config libudev-dev
+
+# CentOS/RHEL/Fedora
+sudo dnf install gcc-c++ cmake pkg-config systemd-devel
+
+# Arch Linux
+sudo pacman -S base-devel cmake pkg-config systemd
+```
+
+**Build:**
+
+```bash
+git clone https://github.com/your-repo/makcu-cpp
+cd makcu-cpp
+./build.sh
+# Or manually:
+# mkdir build && cd build
+# cmake .. -DCMAKE_BUILD_TYPE=Release
+# make -j$(nproc)
+```
+
+**Device Permissions:**
+
+```bash
+# Add user to dialout group for device access
+sudo usermod -a -G dialout $USER
+# Log out and back in for changes to take effect
+```
+
+**Installation:**
+
+```bash
+cd build
+sudo make install  # System-wide installation
+# Or create packages:
+# cpack -G DEB && sudo dpkg -i makcu-cpp-*.deb
+# cpack -G RPM && sudo rpm -i makcu-cpp-*.rpm
 ```
 
 ## 🔥 Quick Start - High Performance
@@ -129,18 +124,46 @@ cd makcu-cpp
 int main() {
     makcu::Device device;
     
-    // Connect with auto-detection
+    // Cross-platform auto-detection
+    // Windows: Automatically finds COM ports
+    // Linux: Automatically finds /dev/ttyUSB* or /dev/ttyACM*
     if (!device.connect()) {
+        std::cerr << "No MAKCU device found!\n";
         return 1;
     }
     
     // Enable gaming mode for maximum performance
     device.enableHighPerformanceMode(true);
     
-    // Ultra-fast operations (1-2ms each)
+    // Ultra-fast operations (identical on Windows/Linux)
     device.click(makcu::MouseButton::LEFT);     // Fire
     device.mouseMove(0, -2);                    // Recoil control
     device.mouseWheel(1);                       // Weapon switch
+    
+    return 0;
+}
+```
+
+### Cross-Platform Device Detection
+
+```cpp
+#include "include/makcu.h"
+
+int main() {
+    // List all available MAKCU devices
+    auto devices = makcu::Device::findDevices();
+    
+    std::cout << "Found " << devices.size() << " MAKCU device(s):\n";
+    for (const auto& dev : devices) {
+        std::cout << "  Port: " << dev.port << "\n";
+        std::cout << "  Description: " << dev.description << "\n";
+    }
+    
+    // Connect to specific device
+    makcu::Device device;
+    if (!devices.empty()) {
+        device.connect(devices[0].port); // First available device
+    }
     
     return 0;
 }
@@ -176,69 +199,6 @@ batch.move(100, 0)
      .scroll(-2);
 batch.execute(); // All commands sent together
 ```
-
-## 🏆 Performance Comparison: C++ vs makcu-py-lib
-
-*Direct comparison using identical test scenarios with makcu-py-lib v2.0*
-
-### Benchmark Results
-
-| Test Name | makcu-py-lib v2.0 | C++ Implementation | Performance Gain |
-|-----------|------------------|-------------------|------------------|
-| **100 Mouse Movements** | ~200ms (2ms avg) | **7ms (0.07ms avg)** | **28x improvement** |
-| **50 Button Clicks** | ~50ms (1ms avg) | **8ms (0.16ms avg)** | **6x improvement** |
-| **Batch Operations** | ~3ms | **<1ms** | **3x+ improvement** |
-| **Async Operations** | ~2ms | **1ms** | **2x improvement** |
-
-### Gaming Suitability Comparison
-
-**makcu-py-lib v2.0:**
-
-- ✅ Excellent for 144Hz gaming (7ms frame budget)
-- ✅ Very good for 240Hz gaming (4.2ms frame budget)  
-- ⚠️ Approaching limits for 360Hz gaming (2.8ms frame budget)
-
-**C++ Implementation:**
-
-- ✅ Perfect for 360Hz gaming (2.8ms frame budget)
-- ✅ Future-ready for 1000Hz+ displays
-- ✅ Maximum headroom for complex operations
-
-### Implementation Comparison
-
-Both implementations share similar optimization principles:
-
-**makcu-py-lib v2.0 Strengths:**
-
-- 🐍 Python ecosystem integration
-- 📚 Extensive documentation
-- 🔧 Easy scripting and automation
-- ⚡ Already very fast (17x improvement over v1.x)
-- 🔄 Async/await support
-
-**C++ Implementation Strengths:**
-
-- 🚀 Compiled performance advantages
-- ⚡ Maximum possible speed
-- 🎮 Gaming-optimized
-- 🔧 System-level integration
-- 📊 Built-in performance profiling
-
-### Choosing Between Them
-
-**Choose makcu-py-lib v2.0 when:**
-
-- You prefer Python development
-- You need rapid prototyping
-- You're building automation scripts
-- Performance requirements are moderate (144-240Hz gaming)
-
-**Choose C++ Implementation when:**
-
-- You need maximum performance
-- You're building competitive gaming tools
-- You need 360Hz+ support
-- You're integrating with C++ applications
 
 ## 🎮 Real Gaming Performance Examples
 
@@ -596,10 +556,20 @@ try {
 
 ### Connection Issues
 
+**Windows:**
+
 - Ensure device is connected via USB
 - Check Device Manager for COM port
 - Verify VID:PID = 1A86:55D3
 - Try different USB ports
+
+**Linux:**
+
+- Check device permissions: `ls -la /dev/ttyUSB* /dev/ttyACM*`
+- Verify device detection: `lsusb | grep 1a86:55d3`
+- Add user to dialout group: `sudo usermod -a -G dialout $USER`
+- Check dmesg for connection messages: `dmesg | tail -20`
+- Try running with sudo (temporary): `sudo ./bin/makcu-cpp`
 
 ## 📝 License
 
@@ -644,7 +614,3 @@ This C++ implementation represents the current performance ceiling for MAKCU dev
 - Modern async/await patterns
 - Built-in performance profiling
 - Production-ready error handling
-
-Whether you're building competitive gaming tools, automation systems, or research applications requiring precise timing, this implementation provides the performance headroom needed for the most demanding scenarios.
-
-**Ready to push the performance envelope?** 🎮⚡
