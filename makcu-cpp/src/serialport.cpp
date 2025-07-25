@@ -12,13 +12,23 @@
 #include <devguid.h>
 #include <cfgmgr32.h>
 #pragma comment(lib, "setupapi.lib")
+#else
+#include <termios.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <dirent.h>
+#include <fstream>
+#include <regex>
+#include <libudev.h>
+#include <errno.h>
 #endif
 
 namespace makcu {
 
     SerialPort::SerialPort()
         : m_baudRate(115200)
-        , m_timeout(100)  // Reduced from 1000ms
+        , m_timeout(100)
         , m_isOpen(false)
 #ifdef _WIN32
         , m_handle(INVALID_HANDLE_VALUE)
@@ -46,39 +56,29 @@ namespace makcu {
         m_portName = port;
         m_baudRate = baudRate;
 
+        // Unified logic with platform abstraction
 #ifdef _WIN32
-        std::string fullPortName = "\\\\.\\" + port;
+        std::string devicePath = "\\\\.\\" + port;
+#else
+        std::string devicePath = "/dev/" + port;
+#endif
 
-        m_handle = CreateFileA(
-            fullPortName.c_str(),
-            GENERIC_READ | GENERIC_WRITE,
-            0,
-            nullptr,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            nullptr
-        );
-
-        if (m_handle == INVALID_HANDLE_VALUE) {
+        if (!platformOpen(devicePath)) {
             return false;
         }
 
-        if (!configurePort()) {
-            CloseHandle(m_handle);
-            m_handle = INVALID_HANDLE_VALUE;
+        if (!platformConfigurePort()) {
+            platformClose();
             return false;
         }
 
         m_isOpen = true;
 
-        // Start high-performance listener thread
+        // Start high-performance listener thread (shared logic)
         m_stopListener = false;
         m_listenerThread = std::thread(&SerialPort::listenerLoop, this);
 
         return true;
-#else
-        return false; // Linux implementation would go here
-#endif
     }
 
     void SerialPort::close() {
@@ -88,13 +88,13 @@ namespace makcu {
             return;
         }
 
-        // Stop listener thread
+        // Stop listener thread (shared logic)
         m_stopListener = true;
         if (m_listenerThread.joinable()) {
             m_listenerThread.join();
         }
 
-        // Cancel all pending commands
+        // Cancel all pending commands (shared logic)
         {
             std::lock_guard<std::mutex> cmdLock(m_commandMutex);
             for (auto& [id, cmd] : m_pendingCommands) {
@@ -109,18 +109,8 @@ namespace makcu {
             m_pendingCommands.clear();
         }
 
-#ifdef _WIN32
-        if (m_handle != INVALID_HANDLE_VALUE) {
-            CloseHandle(m_handle);
-            m_handle = INVALID_HANDLE_VALUE;
-        }
-#else
-        if (m_fd >= 0) {
-            ::close(m_fd);
-            m_fd = -1;
-        }
-#endif
-
+        // Platform-specific cleanup
+        platformClose();
         m_isOpen = false;
     }
 
@@ -142,30 +132,34 @@ namespace makcu {
         auto pendingCmd = std::make_unique<PendingCommand>(cmdId, command, expectResponse, timeout);
         auto future = pendingCmd->promise.get_future();
 
-        // Store pending command
+        // Store pending command (shared logic)
         {
             std::lock_guard<std::mutex> lock(m_commandMutex);
             m_pendingCommands[cmdId] = std::move(pendingCmd);
         }
 
-        // Send command with ID tracking
+        // Send command with ID tracking (shared logic)
         std::string trackedCommand = expectResponse ?
             command + "#" + std::to_string(cmdId) + "\r\n" :
             command + "\r\n";
 
-#ifdef _WIN32
-        DWORD bytesWritten = 0;
-        bool success = WriteFile(m_handle, trackedCommand.c_str(),
-            static_cast<DWORD>(trackedCommand.length()),
-            &bytesWritten, nullptr);
-
-        if (!success || bytesWritten != trackedCommand.length()) {
+        // Unified write operation
+        ssize_t bytesWritten = platformWrite(trackedCommand.c_str(), trackedCommand.length());
+        
+        if (bytesWritten != static_cast<ssize_t>(trackedCommand.length())) {
             std::lock_guard<std::mutex> lock(m_commandMutex);
             auto it = m_pendingCommands.find(cmdId);
             if (it != m_pendingCommands.end()) {
                 try {
+                    std::string errorMsg = "Write failed";
+                    if (bytesWritten < 0) {
+                        errorMsg += " (" + getLastPlatformError() + ")";
+                    } else {
+                        errorMsg += " (partial write: " + std::to_string(bytesWritten) + 
+                                   "/" + std::to_string(trackedCommand.length()) + " bytes)";
+                    }
                     it->second->promise.set_exception(std::make_exception_ptr(
-                        std::runtime_error("Write failed")));
+                        std::runtime_error(errorMsg)));
                 }
                 catch (...) {
                     // Promise already set
@@ -173,9 +167,9 @@ namespace makcu {
                 m_pendingCommands.erase(it);
             }
         }
-
-        FlushFileBuffers(m_handle);
-#endif
+        
+        // Unified flush operation
+        platformFlush();
 
         return future;
     }
@@ -187,23 +181,17 @@ namespace makcu {
 
         std::string fullCommand = command + "\r\n";
 
-#ifdef _WIN32
-        DWORD bytesWritten = 0;
-        bool success = WriteFile(m_handle, fullCommand.c_str(),
-            static_cast<DWORD>(fullCommand.length()),
-            &bytesWritten, nullptr);
-
-        if (success && bytesWritten == fullCommand.length()) {
-            FlushFileBuffers(m_handle);
-            return true;
+        // Unified write and flush operation
+        ssize_t bytesWritten = platformWrite(fullCommand.c_str(), fullCommand.length());
+        if (bytesWritten == static_cast<ssize_t>(fullCommand.length())) {
+            return platformFlush();
         }
-#endif
 
         return false;
     }
 
     void SerialPort::listenerLoop() {
-        // Optimized read buffers
+        // Optimized read buffers (shared logic)
         std::vector<uint8_t> readBuffer(BUFFER_SIZE);
         std::vector<uint8_t> lineBuffer(LINE_BUFFER_SIZE);
         size_t linePos = 0;
@@ -213,32 +201,24 @@ namespace makcu {
 
         while (!m_stopListener && m_isOpen.load()) {
             try {
-#ifdef _WIN32
-                DWORD bytesAvailable = 0;
-                COMSTAT comStat;
-                DWORD errors;
-
-                if (!ClearCommError(m_handle, &errors, &comStat)) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                    continue;
-                }
-
-                bytesAvailable = comStat.cbInQue;
+                // Unified bytes available check
+                size_t bytesAvailable = platformBytesAvailable();
                 if (bytesAvailable == 0) {
                     std::this_thread::sleep_for(std::chrono::microseconds(500));
                     continue;
                 }
 
-                DWORD bytesToRead = std::min<DWORD>(bytesAvailable, static_cast<DWORD>(BUFFER_SIZE));
-                DWORD bytesRead = 0;
-
-                if (!ReadFile(m_handle, readBuffer.data(), bytesToRead, &bytesRead, nullptr)) {
+                // Unified read operation
+                size_t bytesToRead = std::min(bytesAvailable, static_cast<size_t>(BUFFER_SIZE));
+                ssize_t bytesRead = platformRead(readBuffer.data(), bytesToRead);
+                
+                if (bytesRead <= 0) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     continue;
                 }
-
-                // Process each byte efficiently
-                for (DWORD i = 0; i < bytesRead; ++i) {
+                
+                // Shared byte processing logic
+                for (ssize_t i = 0; i < bytesRead; ++i) {
                     uint8_t byte = readBuffer[i];
 
                     // Handle button data (non-printable characters < 32, except CR/LF)
@@ -263,9 +243,8 @@ namespace makcu {
                         }
                     }
                 }
-#endif
 
-                // Periodic cleanup of timed-out commands
+                // Periodic cleanup of timed-out commands (shared logic)
                 auto now = std::chrono::steady_clock::now();
                 if (now - lastCleanup > cleanupInterval) {
                     cleanupTimedOutCommands();
@@ -384,55 +363,6 @@ namespace makcu {
         return (m_commandCounter.fetch_add(1) % 10000) + 1;
     }
 
-    bool SerialPort::configurePort() {
-#ifdef _WIN32
-        m_dcb.DCBlength = sizeof(DCB);
-
-        if (!GetCommState(m_handle, &m_dcb)) {
-            return false;
-        }
-
-        m_dcb.BaudRate = m_baudRate;
-        m_dcb.ByteSize = 8;
-        m_dcb.Parity = NOPARITY;
-        m_dcb.StopBits = ONESTOPBIT;
-        m_dcb.fBinary = TRUE;
-        m_dcb.fParity = FALSE;
-        m_dcb.fOutxCtsFlow = FALSE;
-        m_dcb.fOutxDsrFlow = FALSE;
-        m_dcb.fDtrControl = DTR_CONTROL_DISABLE;
-        m_dcb.fDsrSensitivity = FALSE;
-        m_dcb.fTXContinueOnXoff = FALSE;
-        m_dcb.fOutX = FALSE;
-        m_dcb.fInX = FALSE;
-        m_dcb.fErrorChar = FALSE;
-        m_dcb.fNull = FALSE;
-        m_dcb.fRtsControl = RTS_CONTROL_DISABLE;
-        m_dcb.fAbortOnError = FALSE;
-
-        if (!SetCommState(m_handle, &m_dcb)) {
-            return false;
-        }
-
-        updateTimeouts();
-        return true;
-#else
-        return false;
-#endif
-    }
-
-    void SerialPort::updateTimeouts() {
-#ifdef _WIN32
-        // Gaming-optimized timeouts - much faster than original
-        m_timeouts.ReadIntervalTimeout = 1;          // 1ms between bytes
-        m_timeouts.ReadTotalTimeoutConstant = 10;    // 10ms total read timeout
-        m_timeouts.ReadTotalTimeoutMultiplier = 1;   // 1ms per byte
-        m_timeouts.WriteTotalTimeoutConstant = 10;   // 10ms write timeout
-        m_timeouts.WriteTotalTimeoutMultiplier = 1;  // 1ms per byte
-
-        SetCommTimeouts(m_handle, &m_timeouts);
-#endif
-    }
 
     void SerialPort::setButtonCallback(ButtonCallback callback) {
         m_buttonCallback = callback;
@@ -441,17 +371,13 @@ namespace makcu {
     // Legacy compatibility methods
     bool SerialPort::setBaudRate(uint32_t baudRate) {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if (!m_isOpen) {
-            m_baudRate = baudRate;
-            return true;
-        }
         m_baudRate = baudRate;
-#ifdef _WIN32
-        m_dcb.BaudRate = baudRate;
-        return SetCommState(m_handle, &m_dcb) != 0;
-#else
-        return false;
-#endif
+        
+        if (m_isOpen) {
+            // Unified approach - reconfigure port with new baud rate
+            return platformConfigurePort();
+        }
+        return true;
     }
 
     uint32_t SerialPort::getBaudRate() const {
@@ -477,18 +403,15 @@ namespace makcu {
             return buffer;
         }
 
-#ifdef _WIN32
+        // Unified read operation
         buffer.resize(maxBytes);
-        DWORD bytesRead = 0;
-        bool result = ReadFile(m_handle, buffer.data(),
-            static_cast<DWORD>(maxBytes), &bytesRead, nullptr);
-        if (result && bytesRead > 0) {
+        ssize_t bytesRead = platformRead(buffer.data(), maxBytes);
+        if (bytesRead > 0) {
             buffer.resize(bytesRead);
         }
         else {
             buffer.clear();
         }
-#endif
 
         return buffer;
     }
@@ -504,15 +427,8 @@ namespace makcu {
             return 0;
         }
 
-#ifdef _WIN32
-        COMSTAT comStat;
-        DWORD errors;
-        if (ClearCommError(m_handle, &errors, &comStat)) {
-            return comStat.cbInQue;
-        }
-#endif
-
-        return 0;
+        // Unified bytes available check
+        return const_cast<SerialPort*>(this)->platformBytesAvailable();
     }
 
     bool SerialPort::flush() {
@@ -521,17 +437,14 @@ namespace makcu {
             return false;
         }
 
-#ifdef _WIN32
-        return FlushFileBuffers(m_handle) != 0;
-#else
-        return false;
-#endif
+        // Unified flush operation
+        return platformFlush();
     }
 
     void SerialPort::setTimeout(uint32_t timeoutMs) {
         m_timeout = timeoutMs;
         if (m_isOpen) {
-            updateTimeouts();
+            platformUpdateTimeouts();
         }
     }
 
@@ -569,6 +482,19 @@ namespace makcu {
             }
 
             RegCloseKey(hKey);
+        }
+#else
+        // Linux implementation - scan /dev for tty devices
+        DIR* dir = opendir("/dev");
+        if (dir) {
+            struct dirent* entry;
+            while ((entry = readdir(dir)) != nullptr) {
+                std::string name(entry->d_name);
+                if (name.substr(0, 6) == "ttyUSB" || name.substr(0, 6) == "ttyACM") {
+                    ports.push_back(name);
+                }
+            }
+            closedir(dir);
         }
 #endif
 
@@ -624,11 +550,286 @@ namespace makcu {
         }
 
         SetupDiDestroyDeviceInfoList(deviceInfoSet);
+#else
+        // Linux implementation using udev to find MAKCU devices
+        struct udev* udev = udev_new();
+        if (!udev) {
+            return makcuPorts;
+        }
+        
+        struct udev_enumerate* enumerate = udev_enumerate_new(udev);
+        udev_enumerate_add_match_subsystem(enumerate, "tty");
+        udev_enumerate_scan_devices(enumerate);
+        
+        struct udev_list_entry* devices = udev_enumerate_get_list_entry(enumerate);
+        struct udev_list_entry* entry;
+        
+        udev_list_entry_foreach(entry, devices) {
+            const char* path = udev_list_entry_get_name(entry);
+            struct udev_device* dev = udev_device_new_from_syspath(udev, path);
+            
+            if (dev) {
+                struct udev_device* parent = udev_device_get_parent_with_subsystem_devtype(dev, "usb", "usb_device");
+                if (parent) {
+                    const char* idVendor = udev_device_get_sysattr_value(parent, "idVendor");
+                    const char* idProduct = udev_device_get_sysattr_value(parent, "idProduct");
+                    
+                    // Check for MAKCU device (VID:PID = 1A86:55D3)
+                    bool isMakcuDevice = false;
+                    
+                    // Primary check: VID/PID match
+                    if (idVendor && idProduct && 
+                        strcmp(idVendor, "1a86") == 0 && strcmp(idProduct, "55d3") == 0) {
+                        isMakcuDevice = true;
+                    }
+                    
+                    // Backup check: Description strings (like Windows implementation)
+                    if (!isMakcuDevice) {
+                        const char* product = udev_device_get_sysattr_value(parent, "product");
+                        if (product) {
+                            std::string productStr(product);
+                            if (productStr.find("USB-Enhanced-SERIAL CH343") != std::string::npos ||
+                                productStr.find("USB-SERIAL CH340") != std::string::npos) {
+                                isMakcuDevice = true;
+                            }
+                        }
+                    }
+                    
+                    if (isMakcuDevice) {
+                        const char* devNode = udev_device_get_devnode(dev);
+                        if (devNode) {
+                            std::string portName = std::string(devNode).substr(5); // Remove "/dev/" prefix
+                            makcuPorts.push_back(portName);
+                        }
+                    }
+                }
+                udev_device_unref(dev);
+            }
+        }
+        
+        udev_enumerate_unref(enumerate);
+        udev_unref(udev);
 #endif
 
         std::sort(makcuPorts.begin(), makcuPorts.end());
         makcuPorts.erase(std::unique(makcuPorts.begin(), makcuPorts.end()), makcuPorts.end());
         return makcuPorts;
+    }
+
+    // Platform abstraction helper implementations
+    bool SerialPort::platformOpen(const std::string& devicePath) {
+#ifdef _WIN32
+        m_handle = CreateFileA(
+            devicePath.c_str(),
+            GENERIC_READ | GENERIC_WRITE,
+            0,
+            nullptr,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr
+        );
+        return m_handle != INVALID_HANDLE_VALUE;
+#else
+        m_fd = ::open(devicePath.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+        return m_fd >= 0;
+#endif
+    }
+
+    void SerialPort::platformClose() {
+#ifdef _WIN32
+        if (m_handle != INVALID_HANDLE_VALUE) {
+            CloseHandle(m_handle);
+            m_handle = INVALID_HANDLE_VALUE;
+        }
+#else
+        if (m_fd >= 0) {
+            ::close(m_fd);
+            m_fd = -1;
+        }
+#endif
+    }
+
+    bool SerialPort::platformConfigurePort() {
+#ifdef _WIN32
+        m_dcb.DCBlength = sizeof(DCB);
+
+        if (!GetCommState(m_handle, &m_dcb)) {
+            return false;
+        }
+
+        m_dcb.BaudRate = m_baudRate;
+        m_dcb.ByteSize = 8;
+        m_dcb.Parity = NOPARITY;
+        m_dcb.StopBits = ONESTOPBIT;
+        m_dcb.fBinary = TRUE;
+        m_dcb.fParity = FALSE;
+        m_dcb.fOutxCtsFlow = FALSE;
+        m_dcb.fOutxDsrFlow = FALSE;
+        m_dcb.fDtrControl = DTR_CONTROL_DISABLE;
+        m_dcb.fDsrSensitivity = FALSE;
+        m_dcb.fTXContinueOnXoff = FALSE;
+        m_dcb.fOutX = FALSE;
+        m_dcb.fInX = FALSE;
+        m_dcb.fErrorChar = FALSE;
+        m_dcb.fNull = FALSE;
+        m_dcb.fRtsControl = RTS_CONTROL_DISABLE;
+        m_dcb.fAbortOnError = FALSE;
+
+        if (!SetCommState(m_handle, &m_dcb)) {
+            return false;
+        }
+
+        platformUpdateTimeouts();
+        return true;
+#else
+        // Linux implementation using termios
+        if (tcgetattr(m_fd, &m_oldTermios) != 0) {
+            return false;
+        }
+        
+        m_newTermios = m_oldTermios;
+        
+        // Configure serial port settings to match Windows DCB equivalent
+        // Control flags - match Windows DCB settings
+        m_newTermios.c_cflag &= ~PARENB;    // No parity (DCB.fParity = FALSE)
+        m_newTermios.c_cflag &= ~CSTOPB;    // One stop bit (DCB.StopBits = ONESTOPBIT)
+        m_newTermios.c_cflag &= ~CSIZE;     // Clear data size bits
+        m_newTermios.c_cflag |= CS8;        // 8 data bits (DCB.ByteSize = 8)
+        m_newTermios.c_cflag &= ~CRTSCTS;   // No hardware flow control (DCB.fRtsControl/fOutxCtsFlow = FALSE)
+        m_newTermios.c_cflag |= CREAD | CLOCAL; // Enable receiver, ignore modem lines (DCB.fDtrControl = DISABLE)
+        
+        // Local flags - raw input processing like Windows binary mode
+        m_newTermios.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG); // Raw input (DCB.fBinary = TRUE equivalent)
+        m_newTermios.c_lflag &= ~(ECHOK | ECHONL | IEXTEN);      // Additional echo/processing disable
+        
+        // Output flags - raw output like Windows
+        m_newTermios.c_oflag &= ~OPOST;     // Raw output (no post-processing)
+        m_newTermios.c_oflag &= ~(ONLCR | OCRNL | ONOCR | ONLRET); // No line ending conversions
+        
+        // Input flags - match Windows flow control settings
+        m_newTermios.c_iflag &= ~(IXON | IXOFF | IXANY); // No software flow control (DCB.fOutX/fInX = FALSE)
+        m_newTermios.c_iflag &= ~(INLCR | ICRNL | IGNCR); // No line ending conversion
+        m_newTermios.c_iflag &= ~(ISTRIP | INPCK);        // No parity stripping (DCB.fParity = FALSE)
+        m_newTermios.c_iflag &= ~(BRKINT | IGNBRK);       // Break handling like Windows
+        
+        // Set timeouts - gaming-optimized to match Windows (10ms equivalent)
+        m_newTermios.c_cc[VMIN] = 0;        // Non-blocking read
+        m_newTermios.c_cc[VTIME] = 1;       // 0.1 second timeout (minimum granularity)
+        
+        // Set baud rate
+        speed_t speed;
+        switch (m_baudRate) {
+            case 9600:   speed = B9600; break;
+            case 19200:  speed = B19200; break;
+            case 38400:  speed = B38400; break;
+            case 57600:  speed = B57600; break;
+            case 115200: speed = B115200; break;
+            case 230400: speed = B230400; break;
+            case 460800: speed = B460800; break;
+            case 921600: speed = B921600; break;
+            case 1000000: speed = B1000000; break;
+            case 1152000: speed = B1152000; break;
+            case 1500000: speed = B1500000; break;
+            case 2000000: speed = B2000000; break;
+            case 2500000: speed = B2500000; break;
+            case 3000000: speed = B3000000; break;
+            case 3500000: speed = B3500000; break;
+            case 4000000: speed = B4000000; break;
+            default:     speed = B115200; break;
+        }
+        
+        cfsetispeed(&m_newTermios, speed);
+        cfsetospeed(&m_newTermios, speed);
+        
+        if (tcsetattr(m_fd, TCSANOW, &m_newTermios) != 0) {
+            return false;
+        }
+        
+        // Flush any existing data
+        tcflush(m_fd, TCIOFLUSH);
+        
+        return true;
+#endif
+    }
+
+    void SerialPort::platformUpdateTimeouts() {
+#ifdef _WIN32
+        // Gaming-optimized timeouts - much faster than original
+        m_timeouts.ReadIntervalTimeout = 1;          // 1ms between bytes
+        m_timeouts.ReadTotalTimeoutConstant = 10;    // 10ms total read timeout
+        m_timeouts.ReadTotalTimeoutMultiplier = 1;   // 1ms per byte
+        m_timeouts.WriteTotalTimeoutConstant = 10;   // 10ms write timeout
+        m_timeouts.WriteTotalTimeoutMultiplier = 1;  // 1ms per byte
+
+        SetCommTimeouts(m_handle, &m_timeouts);
+#else
+        // Linux gaming-optimized timeouts - match Windows performance
+        if (m_isOpen && m_fd >= 0) {
+            struct termios currentTermios;
+            if (tcgetattr(m_fd, &currentTermios) == 0) {
+                // Update timeout settings to match current m_timeout value
+                // VTIME is in deciseconds (0.1s units), so convert from ms
+                uint8_t vtime = std::min(255, std::max(1, static_cast<int>(m_timeout / 100)));
+                currentTermios.c_cc[VTIME] = vtime;
+                currentTermios.c_cc[VMIN] = 0;  // Non-blocking
+                tcsetattr(m_fd, TCSANOW, &currentTermios);
+            }
+        }
+#endif
+    }
+
+    ssize_t SerialPort::platformWrite(const void* data, size_t length) {
+#ifdef _WIN32
+        DWORD bytesWritten = 0;
+        bool success = WriteFile(m_handle, data, static_cast<DWORD>(length), &bytesWritten, nullptr);
+        return success ? static_cast<ssize_t>(bytesWritten) : -1;
+#else
+        return ::write(m_fd, data, length);
+#endif
+    }
+
+    ssize_t SerialPort::platformRead(void* buffer, size_t maxBytes) {
+#ifdef _WIN32
+        DWORD bytesRead = 0;
+        bool success = ReadFile(m_handle, buffer, static_cast<DWORD>(maxBytes), &bytesRead, nullptr);
+        return success ? static_cast<ssize_t>(bytesRead) : -1;
+#else
+        return ::read(m_fd, buffer, maxBytes);
+#endif
+    }
+
+    size_t SerialPort::platformBytesAvailable() {
+#ifdef _WIN32
+        COMSTAT comStat;
+        DWORD errors;
+        if (ClearCommError(m_handle, &errors, &comStat)) {
+            return comStat.cbInQue;
+        }
+        return 0;
+#else
+        int bytesAvailable = 0;
+        if (ioctl(m_fd, FIONREAD, &bytesAvailable) >= 0) {
+            return static_cast<size_t>(bytesAvailable);
+        }
+        return 0;
+#endif
+    }
+
+    bool SerialPort::platformFlush() {
+#ifdef _WIN32
+        return FlushFileBuffers(m_handle) != 0;
+#else
+        return tcdrain(m_fd) == 0;
+#endif
+    }
+
+    std::string SerialPort::getLastPlatformError() {
+#ifdef _WIN32
+        DWORD error = GetLastError();
+        return "Windows error: " + std::to_string(error);
+#else
+        return "errno: " + std::to_string(errno);
+#endif
     }
 
 } // namespace makcu
