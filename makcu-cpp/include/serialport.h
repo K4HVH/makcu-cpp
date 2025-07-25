@@ -12,6 +12,14 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <termios.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <dirent.h>
+#include <fstream>
+#include <regex>
 #endif
 
 namespace makcu {
@@ -85,6 +93,8 @@ namespace makcu {
         COMMTIMEOUTS m_timeouts;
 #else
         int m_fd;
+        struct termios m_oldTermios;
+        struct termios m_newTermios;
 #endif
 
         // Command tracking system
@@ -104,14 +114,25 @@ namespace makcu {
         static constexpr size_t BUFFER_SIZE = 4096;
         static constexpr size_t LINE_BUFFER_SIZE = 256;
 
-        bool configurePort();
-        void updateTimeouts();
+        bool configurePort() { return platformConfigurePort(); }
+        void updateTimeouts() { platformUpdateTimeouts(); }
         void listenerLoop();
         void processIncomingData();
         void handleButtonData(uint8_t data);
         void processResponse(const std::string& response);
         void cleanupTimedOutCommands();
         int generateCommandId();
+
+        // Platform abstraction helpers for unified logic
+        bool platformOpen(const std::string& devicePath);
+        void platformClose();
+        bool platformConfigurePort();
+        void platformUpdateTimeouts();
+        ssize_t platformWrite(const void* data, size_t length);
+        ssize_t platformRead(void* buffer, size_t maxBytes);
+        size_t platformBytesAvailable();
+        bool platformFlush();
+        std::string getLastPlatformError();
 
         // Disable copy
         SerialPort(const SerialPort&) = delete;
