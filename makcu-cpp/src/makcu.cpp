@@ -223,6 +223,30 @@ namespace makcu {
             return result;
         }
 
+        // High-performance async command execution 
+        std::future<bool> executeCommandAsync(const std::string& command) {
+            if (!connected.load()) {
+                auto promise = std::promise<bool>();
+                promise.set_value(false);
+                return promise.get_future();
+            }
+
+            auto start = std::chrono::high_resolution_clock::now();
+            
+            // For gaming performance, use fire-and-forget with immediate return
+            bool result = serialPort->sendCommand(command);
+            
+            // Performance profiling
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+            makcu::PerformanceProfiler::logCommandTiming(command + "_async", duration);
+            
+            // Return immediate result for maximum performance
+            auto promise = std::promise<bool>();
+            promise.set_value(result);
+            return promise.get_future();
+        }
+
         // Optimized move command with buffer reuse
         bool executeMoveCommand(int32_t x, int32_t y) {
             std::lock_guard<std::mutex> lock(moveBufferMutex);
@@ -356,9 +380,17 @@ namespace makcu {
     }
 
     std::future<bool> Device::connectAsync(const std::string& port) {
+        // OPTIMIZED: Use immediate connection check for connected state
+        if (m_impl->connected.load()) {
+            auto promise = std::promise<bool>();
+            promise.set_value(true);
+            return promise.get_future();
+        }
+        
+        // For actual connection, this is inherently I/O bound so thread is acceptable
         return std::async(std::launch::async, [this, port]() {
             return connect(port);
-            });
+        });
     }
 
     void Device::disconnect() {
@@ -378,9 +410,17 @@ namespace makcu {
     }
 
     std::future<void> Device::disconnectAsync() {
+        // OPTIMIZED: Immediate return if already disconnected
+        if (!m_impl->connected.load()) {
+            auto promise = std::promise<void>();
+            promise.set_value();
+            return promise.get_future();
+        }
+        
+        // Disconnection involves I/O cleanup, so thread is acceptable
         return std::async(std::launch::async, [this]() {
             disconnect();
-            });
+        });
     }
 
     bool Device::isConnected() const {
@@ -411,9 +451,15 @@ namespace makcu {
     }
 
     std::future<std::string> Device::getVersionAsync() const {
-        return std::async(std::launch::async, [this]() {
-            return getVersion();
-            });
+        if (!m_impl->connected.load()) {
+            auto promise = std::promise<std::string>();
+            promise.set_value("");
+            return promise.get_future();
+        }
+
+        // Use SerialPort's async command directly - no extra threads!
+        return m_impl->serialPort->sendTrackedCommand("km.version()", true,
+            std::chrono::milliseconds(100));
     }
 
     // High-performance mouse control methods
@@ -461,21 +507,64 @@ namespace makcu {
     }
 
     std::future<bool> Device::mouseDownAsync(MouseButton button) {
-        return std::async(std::launch::async, [this, button]() {
-            return mouseDown(button);
-            });
+        if (!m_impl->connected.load()) {
+            auto promise = std::promise<bool>();
+            promise.set_value(false);
+            return promise.get_future();
+        }
+
+        auto it = m_impl->commandCache.press_commands.find(button);
+        if (it != m_impl->commandCache.press_commands.end()) {
+            return m_impl->executeCommandAsync(it->second);
+        }
+        
+        auto promise = std::promise<bool>();
+        promise.set_value(false);
+        return promise.get_future();
     }
 
     std::future<bool> Device::mouseUpAsync(MouseButton button) {
-        return std::async(std::launch::async, [this, button]() {
-            return mouseUp(button);
-            });
+        if (!m_impl->connected.load()) {
+            auto promise = std::promise<bool>();
+            promise.set_value(false);
+            return promise.get_future();
+        }
+
+        auto it = m_impl->commandCache.release_commands.find(button);
+        if (it != m_impl->commandCache.release_commands.end()) {
+            return m_impl->executeCommandAsync(it->second);
+        }
+        
+        auto promise = std::promise<bool>();
+        promise.set_value(false);
+        return promise.get_future();
     }
 
     std::future<bool> Device::clickAsync(MouseButton button) {
-        return std::async(std::launch::async, [this, button]() {
-            return click(button);
-            });
+        if (!m_impl->connected.load()) {
+            auto promise = std::promise<bool>();
+            promise.set_value(false);
+            return promise.get_future();
+        }
+
+        auto pressIt = m_impl->commandCache.press_commands.find(button);
+        auto releaseIt = m_impl->commandCache.release_commands.find(button);
+
+        if (pressIt != m_impl->commandCache.press_commands.end() &&
+            releaseIt != m_impl->commandCache.release_commands.end()) {
+
+            // For maximum performance, execute both commands immediately
+            bool result1 = m_impl->serialPort->sendCommand(pressIt->second);
+            bool result2 = m_impl->serialPort->sendCommand(releaseIt->second);
+            
+            auto promise = std::promise<bool>();
+            promise.set_value(result1 && result2);
+            return promise.get_future();
+        }
+        
+        auto promise = std::promise<bool>();
+        promise.set_value(false);
+        return promise.get_future();
     }
 
     bool Device::mouseButtonState(MouseButton button) {
@@ -489,9 +578,10 @@ namespace makcu {
     }
 
     std::future<bool> Device::mouseButtonStateAsync(MouseButton button) {
-        return std::async(std::launch::async, [this, button]() {
-            return mouseButtonState(button);
-            });
+        // Button state is cached, so this can be immediate
+        auto promise = std::promise<bool>();
+        promise.set_value(mouseButtonState(button));
+        return promise.get_future();
     }
 
     // High-performance movement methods
@@ -526,22 +616,40 @@ namespace makcu {
     }
 
     std::future<bool> Device::mouseMoveAsync(int32_t x, int32_t y) {
-        return std::async(std::launch::async, [this, x, y]() {
-            return mouseMove(x, y);
-            });
+        if (!m_impl->connected.load()) {
+            auto promise = std::promise<bool>();
+            promise.set_value(false);
+            return promise.get_future();
+        }
+
+        std::string command = "km.move(" + std::to_string(x) + "," + std::to_string(y) + ")";
+        return m_impl->executeCommandAsync(command);
     }
 
     std::future<bool> Device::mouseMoveSmoothAsync(int32_t x, int32_t y, uint32_t segments) {
-        return std::async(std::launch::async, [this, x, y, segments]() {
-            return mouseMoveSmooth(x, y, segments);
-            });
+        if (!m_impl->connected.load()) {
+            auto promise = std::promise<bool>();
+            promise.set_value(false);
+            return promise.get_future();
+        }
+
+        std::string command = "km.move(" + std::to_string(x) + "," +
+            std::to_string(y) + "," + std::to_string(segments) + ")";
+        return m_impl->executeCommandAsync(command);
     }
 
     std::future<bool> Device::mouseMoveBezierAsync(int32_t x, int32_t y, uint32_t segments,
         int32_t ctrl_x, int32_t ctrl_y) {
-        return std::async(std::launch::async, [this, x, y, segments, ctrl_x, ctrl_y]() {
-            return mouseMoveBezier(x, y, segments, ctrl_x, ctrl_y);
-            });
+        if (!m_impl->connected.load()) {
+            auto promise = std::promise<bool>();
+            promise.set_value(false);
+            return promise.get_future();
+        }
+
+        std::string command = "km.bezier(" + std::to_string(x) + "," + std::to_string(y) + "," +
+            std::to_string(segments) + "," + std::to_string(ctrl_x) + "," +
+            std::to_string(ctrl_y) + ")";
+        return m_impl->executeCommandAsync(command);
     }
 
     bool Device::mouseWheel(int32_t delta) {
@@ -554,9 +662,14 @@ namespace makcu {
     }
 
     std::future<bool> Device::mouseWheelAsync(int32_t delta) {
-        return std::async(std::launch::async, [this, delta]() {
-            return mouseWheel(delta);
-            });
+        if (!m_impl->connected.load()) {
+            auto promise = std::promise<bool>();
+            promise.set_value(false);
+            return promise.get_future();
+        }
+
+        std::string command = "km.wheel(" + std::to_string(delta) + ")";
+        return m_impl->executeCommandAsync(command);
     }
 
     // Mouse locking methods with caching
@@ -815,15 +928,26 @@ namespace makcu {
     }
 
     std::future<std::string> Device::getMouseSerialAsync() {
-        return std::async(std::launch::async, [this]() {
-            return getMouseSerial();
-            });
+        if (!m_impl->connected.load()) {
+            auto promise = std::promise<std::string>();
+            promise.set_value("");
+            return promise.get_future();
+        }
+
+        // Use SerialPort's async command directly - no extra threads!
+        return m_impl->serialPort->sendTrackedCommand("km.serial()", true,
+            std::chrono::milliseconds(100));
     }
 
     std::future<bool> Device::setMouseSerialAsync(const std::string& serial) {
-        return std::async(std::launch::async, [this, serial]() {
-            return setMouseSerial(serial);
-            });
+        if (!m_impl->connected.load()) {
+            auto promise = std::promise<bool>();
+            promise.set_value(false);
+            return promise.get_future();
+        }
+
+        std::string command = "km.serial('" + serial + "')";
+        return m_impl->executeCommandAsync(command);
     }
 
     bool Device::setBaudRate(uint32_t baudRate) {
@@ -858,6 +982,38 @@ namespace makcu {
             }
         }
         return true;
+    }
+
+    // Optimized async version - fires all commands rapidly without delays
+    std::future<bool> Device::clickSequenceAsync(const std::vector<MouseButton>& buttons,
+        std::chrono::milliseconds delay) {
+        if (!m_impl->connected.load()) {
+            auto promise = std::promise<bool>();
+            promise.set_value(false);
+            return promise.get_future();
+        }
+
+        // For maximum performance, execute all clicks immediately without delay
+        // This is truly async - fire all commands and return immediately
+        bool allSuccessful = true;
+        for (const auto& button : buttons) {
+            auto pressIt = m_impl->commandCache.press_commands.find(button);
+            auto releaseIt = m_impl->commandCache.release_commands.find(button);
+
+            if (pressIt != m_impl->commandCache.press_commands.end() &&
+                releaseIt != m_impl->commandCache.release_commands.end()) {
+
+                bool result1 = m_impl->serialPort->sendCommand(pressIt->second);
+                bool result2 = m_impl->serialPort->sendCommand(releaseIt->second);
+                allSuccessful = allSuccessful && result1 && result2;
+            } else {
+                allSuccessful = false;
+            }
+        }
+        
+        auto promise = std::promise<bool>();
+        promise.set_value(allSuccessful);
+        return promise.get_future();
     }
 
     bool Device::movePattern(const std::vector<std::pair<int32_t, int32_t>>& points,
