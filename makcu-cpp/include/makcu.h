@@ -214,6 +214,8 @@ namespace makcu {
         // High-level automation
         bool clickSequence(const std::vector<MouseButton>& buttons,
             std::chrono::milliseconds delay = std::chrono::milliseconds(50));
+        std::future<bool> clickSequenceAsync(const std::vector<MouseButton>& buttons,
+            std::chrono::milliseconds delay = std::chrono::milliseconds(50));
         bool movePattern(const std::vector<std::pair<int32_t, int32_t>>& points,
             bool smooth = true, uint32_t segments = 10);
 
