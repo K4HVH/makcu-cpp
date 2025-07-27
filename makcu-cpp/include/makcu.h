@@ -13,8 +13,9 @@
 
 namespace makcu {
 
-    // Forward declaration
+    // Forward declarations
     class SerialPort;
+    class HumanPatterns;
 
     // Enums
     enum class MouseButton : uint8_t {
@@ -205,6 +206,10 @@ namespace makcu {
         void enableHighPerformanceMode(bool enable = true);
         bool isHighPerformanceModeEnabled() const;
 
+        // Human-like interaction patterns
+        HumanPatterns* getHumanPatterns();
+        const HumanPatterns* getHumanPatterns() const;
+
         // Command batching for maximum performance
         class BatchCommandBuilder {
         public:
@@ -232,6 +237,7 @@ namespace makcu {
         // Implementation details with caching and optimization
         class Impl;
         std::unique_ptr<Impl> m_impl;
+        std::unique_ptr<HumanPatterns> m_humanPatterns;
 
         // Disable copy
         Device(const Device&) = delete;
