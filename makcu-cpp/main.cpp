@@ -71,25 +71,20 @@ void performanceTest() {
     auto batch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(batch_end - batch_start).count();
     std::cout << "   Batch (9 commands): " << batch_ms << "ms\n";
 
-    // Test 4: Async operations
-    std::cout << "4. Testing async operations...\n";
+    // Test 4: High-performance operations
+    std::cout << "4. Testing high-performance synchronous operations...\n";
     auto async_start = std::chrono::high_resolution_clock::now();
 
-    std::vector<std::future<bool>> futures;
-    futures.push_back(device.mouseMoveAsync(25, 25));
-    futures.push_back(device.clickAsync(makcu::MouseButton::LEFT));
-    futures.push_back(device.mouseMoveSmoothAsync(-25, -25, 10));
-    futures.push_back(device.mouseWheelAsync(2));
-    futures.push_back(device.mouseMoveBezierAsync(15, 15, 8, 7, 7));
-
-    // Wait for all to complete
-    for (auto& future : futures) {
-        future.get();
-    }
+    // Use synchronous methods for maximum performance (fire-and-forget)
+    device.mouseMove(25, 25);
+    device.click(makcu::MouseButton::LEFT);
+    device.mouseMoveSmooth(-25, -25, 10);
+    device.mouseWheel(2);
+    device.mouseMoveBezier(15, 15, 8, 7, 7);
 
     auto async_end = std::chrono::high_resolution_clock::now();
     auto async_ms = std::chrono::duration_cast<std::chrono::milliseconds>(async_end - async_start).count();
-    std::cout << "   5 async operations: " << async_ms << "ms\n";
+    std::cout << "   5 synchronous operations: " << async_ms << "ms\n";
 
     auto total_end = std::chrono::high_resolution_clock::now();
     auto total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(total_end - start).count();
@@ -202,20 +197,19 @@ void asyncDemo() {
     if (connectFuture.get()) {
         std::cout << "Connected successfully!\n";
 
-        // Demonstrate async operations
-        std::cout << "Performing async operations...\n";
+        // Demonstrate synchronous operations
+        std::cout << "Performing device information queries...\n";
 
-        auto versionFuture = device.getVersionAsync();
-        auto serialFuture = device.getMouseSerialAsync();
+        // Use synchronous methods
+        std::string version = device.getVersion();
+        std::string serial = device.getMouseSerial();
 
-        // Wait for results
-        std::cout << "Firmware version: " << versionFuture.get() << "\n";
-        std::cout << "Mouse serial: " << serialFuture.get() << "\n";
+        std::cout << "Firmware version: " << version << "\n";
+        std::cout << "Mouse serial: " << serial << "\n";
 
-        // Async disconnect
-        auto disconnectFuture = device.disconnectAsync();
-        disconnectFuture.wait();
-        std::cout << "Disconnected asynchronously\n";
+        // Synchronous disconnect
+        device.disconnect();
+        std::cout << "Disconnected\n";
     }
     else {
         std::cout << "Failed to connect\n";

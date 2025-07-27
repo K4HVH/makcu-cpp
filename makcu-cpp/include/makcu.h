@@ -125,26 +125,19 @@ namespace makcu {
 
         // Async connection methods
         std::future<bool> connectAsync(const std::string& port = "");
-        std::future<void> disconnectAsync();
 
         // Device info
         DeviceInfo getDeviceInfo() const;
         std::string getVersion() const;
-        std::future<std::string> getVersionAsync() const;
 
         // High-performance mouse button control (fire-and-forget)
         bool mouseDown(MouseButton button);
         bool mouseUp(MouseButton button);
         bool click(MouseButton button);  // Combined press+release
 
-        // Async mouse button control
-        std::future<bool> mouseDownAsync(MouseButton button);
-        std::future<bool> mouseUpAsync(MouseButton button);
-        std::future<bool> clickAsync(MouseButton button);
 
         // Mouse button state queries (with caching)
         bool mouseButtonState(MouseButton button);
-        std::future<bool> mouseButtonStateAsync(MouseButton button);
 
         // High-performance movement (fire-and-forget for gaming)
         bool mouseMove(int32_t x, int32_t y);
@@ -152,15 +145,9 @@ namespace makcu {
         bool mouseMoveBezier(int32_t x, int32_t y, uint32_t segments,
             int32_t ctrl_x, int32_t ctrl_y);
 
-        // Async movement
-        std::future<bool> mouseMoveAsync(int32_t x, int32_t y);
-        std::future<bool> mouseMoveSmoothAsync(int32_t x, int32_t y, uint32_t segments);
-        std::future<bool> mouseMoveBezierAsync(int32_t x, int32_t y, uint32_t segments,
-            int32_t ctrl_x, int32_t ctrl_y);
 
         // Mouse wheel
         bool mouseWheel(int32_t delta);
-        std::future<bool> mouseWheelAsync(int32_t delta);
 
         // Mouse locking with state caching
         bool lockMouseX(bool lock = true);
@@ -200,9 +187,6 @@ namespace makcu {
         bool setMouseSerial(const std::string& serial);
         bool resetMouseSerial();
 
-        // Async serial methods
-        std::future<std::string> getMouseSerialAsync();
-        std::future<bool> setMouseSerialAsync(const std::string& serial);
 
         // Device control
         bool setBaudRate(uint32_t baudRate);
@@ -213,8 +197,6 @@ namespace makcu {
 
         // High-level automation
         bool clickSequence(const std::vector<MouseButton>& buttons,
-            std::chrono::milliseconds delay = std::chrono::milliseconds(50));
-        std::future<bool> clickSequenceAsync(const std::vector<MouseButton>& buttons,
             std::chrono::milliseconds delay = std::chrono::milliseconds(50));
         bool movePattern(const std::vector<std::pair<int32_t, int32_t>>& points,
             bool smooth = true, uint32_t segments = 10);
@@ -245,7 +227,6 @@ namespace makcu {
         // Legacy raw command interface (not recommended for performance)
         bool sendRawCommand(const std::string& command) const;
         std::string receiveRawResponse() const;
-        std::future<std::string> sendRawCommandAsync(const std::string& command) const;
 
     private:
         // Implementation details with caching and optimization
