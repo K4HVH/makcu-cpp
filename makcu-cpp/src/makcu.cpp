@@ -404,8 +404,11 @@ namespace makcu {
             return "";
         }
 
+        // Small delay to ensure any pending responses are cleared
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        
         auto future = m_impl->serialPort->sendTrackedCommand("km.version()", true,
-            std::chrono::milliseconds(100));
+            std::chrono::milliseconds(50));
         try {
             return future.get();
         }
@@ -750,8 +753,11 @@ namespace makcu {
     std::string Device::getMouseSerial() {
         if (!m_impl->connected.load()) return "";
 
+        // Small delay to ensure any pending responses are cleared
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
         auto future = m_impl->serialPort->sendTrackedCommand("km.serial()", true,
-            std::chrono::milliseconds(100));
+            std::chrono::milliseconds(50));
         try {
             return future.get();
         }
