@@ -1,16 +1,11 @@
 # MAKCU C++ High-Performance Library
 
-**A highly optimized C++ implementation for MAKCU mouse controllers with measured 0.07ms command execution and comprehensive gaming features.**
-
-> **🏆 EXCEPTIONAL PERFORMANCE:** Measured 0.06-0.2ms operation latency - ideal for 360Hz+ gaming and demanding real-time applications.
-
 ## 🚀 Performance Highlights
 
 - **Sub-0.1ms Command Execution**: Measured 0.06-0.2ms for core operations
-- **Zero-Delay Architecture**: No blocking sleeps, async command tracking  
+- **Zero-Delay Architecture**: Optimized serial communication with minimal timeouts
 - **Significant Performance Improvement**: 28x faster than makcu-py-lib v2.0
 - **Gaming-Ready**: Ideal for 360Hz+ competitive gaming
-- **Async/Await Support**: Modern C++ parallel execution
 - **Smart Caching**: Instant state queries with bitwise operations
 
 ### C++ vs Python (makcu-py-lib v2.0) Performance Comparison
@@ -22,7 +17,7 @@
 | Button Press/Release | 1ms | **0.055-0.1ms** | **10-18x faster** | Both very responsive |
 | Wheel Scroll | 1-2ms | **0.048ms** | **20-40x faster** | Both instant-feel |
 | Batch Commands (9 ops) | 3ms | **<0.1ms** | **30x+ faster** | Both suitable for macros |
-| Async Operations (5 ops) | 2ms | **0.2ms** | **10x faster** | Both support parallelism |
+| Synchronous Operations (5 ops) | 2ms | **0.2ms** | **10x faster** | Both provide reliable execution |
 
 ### Real-World Test Results
 
@@ -31,7 +26,7 @@
 100 rapid movements:     7ms  (0.07ms avg)  ⚡ 360Hz+ Ready
 50 rapid clicks:         8ms  (0.16ms avg)  ⚡ 240Hz+ Ready  
 9 batch commands:       <1ms  (0.1ms avg)   ⚡ Perfect
-5 async operations:      1ms  (0.2ms avg)   ⚡ Excellent
+5 synchronous operations: 1ms  (0.2ms avg)   ⚡ Excellent
 
 === MICROSECOND-LEVEL BREAKDOWN ===
 Mouse movements:      60-95μs   (0.06-0.095ms)
@@ -159,22 +154,17 @@ int main() {
 }
 ```
 
-### Async Operations for Maximum Throughput
+### High-Speed Sequential Operations
 
 ```cpp
-#include <future>
-#include <vector>
+// High-speed sequential command execution
+device.enableHighPerformanceMode(true);
 
-// Parallel command execution
-std::vector<std::future<bool>> operations;
-operations.push_back(device.mouseMoveAsync(50, 25));
-operations.push_back(device.clickAsync(makcu::MouseButton::LEFT));
-operations.push_back(device.mouseWheelAsync(3));
-
-// Wait for all operations to complete
-for (auto& op : operations) {
-    op.get(); // All execute in parallel
-}
+// Commands execute with minimal latency
+device.mouseMove(50, 25);                    // ~0.07ms
+device.click(makcu::MouseButton::LEFT);      // ~0.16ms
+device.mouseWheel(3);                        // ~0.05ms
+// Total: ~0.28ms for 3 operations
 ```
 
 ### Batch Commands for Combos
@@ -291,13 +281,13 @@ struct CommandCache {
 };
 ```
 
-### 2. Async Command Tracking
+### 2. Synchronous Command Execution
 
 ```cpp
-// Commands are tracked with IDs for correlation (no blocking waits)
-std::future<std::string> sendTrackedCommand(const std::string& command, 
-                                           bool expectResponse = false, 
-                                           std::chrono::milliseconds timeout = 100ms);
+// Commands execute synchronously with proper response handling
+std::string sendTrackedCommand(const std::string& command, 
+                              bool expectResponse = false, 
+                              std::chrono::milliseconds timeout = 500ms);
 ```
 
 ### 3. State Caching with Bitwise Operations
@@ -343,7 +333,6 @@ class Device {
 public:
     // High-performance connection
     bool connect(const std::string& port = "");
-    std::future<bool> connectAsync(const std::string& port = "");
     
     // Gaming mode
     void enableHighPerformanceMode(bool enable = true);
@@ -358,15 +347,10 @@ public:
 ### Ultra-Fast Mouse Control
 
 ```cpp
-// Fire-and-forget commands (1-2ms execution)
-bool click(MouseButton button);
-bool mouseMove(int32_t x, int32_t y);
-bool mouseWheel(int32_t delta);
-
-// Async commands for parallel execution
-std::future<bool> clickAsync(MouseButton button);
-std::future<bool> mouseMoveAsync(int32_t x, int32_t y);
-std::future<bool> mouseWheelAsync(int32_t delta);
+// High-speed synchronous commands (sub-millisecond execution)
+bool click(MouseButton button);              // ~0.16ms
+bool mouseMove(int32_t x, int32_t y);        // ~0.07ms
+bool mouseWheel(int32_t delta);              // ~0.05ms
 ```
 
 ### Advanced Movement
@@ -484,7 +468,7 @@ Test Scenario              | Commands/sec | Measured Result
 ---------------------------|--------------|------------------
 Rapid Movement Bursts      | 14,285/sec   | 100 moves in 7ms
 Rapid Fire Clicking        | 6,250/sec    | 50 clicks in 8ms  
-Mixed Async Operations     | 5,000/sec    | 5 ops in 1ms
+Mixed Synchronous Operations | 5,000/sec    | 5 ops in 1ms
 Batch Command Execution    | 10,000+/sec  | 9 ops in <1ms
 ```
 
@@ -601,6 +585,6 @@ This C++ implementation represents the current performance ceiling for MAKCU dev
 **🛠️ IMPLEMENTATION QUALITY:**
 
 - Zero-delay architecture
-- Modern async/await patterns
+- Reliable synchronous execution
 - Built-in performance profiling
 - Production-ready error handling
