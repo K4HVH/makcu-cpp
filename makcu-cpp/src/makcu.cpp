@@ -1,5 +1,6 @@
 #include "../include/makcu.h"
 #include "../include/serialport.h"
+#include "../include/human_patterns.h"
 #include <iostream>
 #include <sstream>
 #include <thread>
@@ -279,7 +280,9 @@ namespace makcu {
     };
 
     // Device implementation
-    Device::Device() : m_impl(std::make_unique<Impl>()) {}
+    Device::Device() : m_impl(std::make_unique<Impl>()) {
+        m_humanPatterns = std::make_unique<HumanPatterns>(this);
+    }
 
     Device::~Device() {
         disconnect();
@@ -842,6 +845,14 @@ namespace makcu {
 
     bool Device::isHighPerformanceModeEnabled() const {
         return m_impl->highPerformanceMode.load();
+    }
+
+    HumanPatterns* Device::getHumanPatterns() {
+        return m_humanPatterns.get();
+    }
+
+    const HumanPatterns* Device::getHumanPatterns() const {
+        return m_humanPatterns.get();
     }
 
     // Batch command builder implementation

@@ -32,6 +32,7 @@ include_directories(makcu-cpp/include)
 set(SOURCES
     makcu-cpp/src/makcu.cpp
     makcu-cpp/src/serialport.cpp
+    makcu-cpp/src/human_patterns.cpp
     makcu-cpp/main.cpp
 )
 
@@ -39,6 +40,7 @@ set(SOURCES
 set(HEADERS
     makcu-cpp/include/makcu.h
     makcu-cpp/include/serialport.h
+    makcu-cpp/include/human_patterns.h
 )
 
 # Create executable
