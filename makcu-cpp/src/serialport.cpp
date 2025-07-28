@@ -6,6 +6,7 @@
 #include <string>
 #include <cstring>
 #include <chrono>
+#include <future>
 
 #ifdef _WIN32
 #include <setupapi.h>
@@ -89,33 +90,52 @@ namespace makcu {
             return;
         }
 
-        // Stop listener thread and wait for it to finish before canceling commands
-        m_stopListener = true;
+        // Stop listener thread first
+        m_stopListener.store(true, std::memory_order_release);
+        
+        // Wait for listener thread to finish with timeout protection
         if (m_listenerThread.joinable()) {
-            m_listenerThread.join();
+            // Use a timeout to prevent indefinite blocking
+            auto future = std::async(std::launch::async, [this]() {
+                m_listenerThread.join();
+            });
+            
+            if (future.wait_for(std::chrono::milliseconds(1000)) == std::future_status::timeout) {
+                // Thread didn't exit cleanly - this is a serious issue but we must continue cleanup
+                // The thread will be destroyed when the object is destroyed
+                m_listenerThread.detach();
+            }
         }
 
-        // Now safely cancel all pending commands - listener thread is stopped
+        // Cancel all pending commands with double-checked locking for safety
+        // First pass: mark all commands as cancelled to prevent new promise operations
+        std::vector<std::unique_ptr<PendingCommand>> commandsToCancel;
         {
             std::lock_guard<std::mutex> cmdLock(m_commandMutex);
+            commandsToCancel.reserve(m_pendingCommands.size());
             for (auto& [id, cmd] : m_pendingCommands) {
-                try {
-                    cmd->promise.set_exception(std::make_exception_ptr(
-                        std::runtime_error("Connection closed")));
-                }
-                catch (...) {
-                    // Promise already set or moved - safe to ignore
-                }
+                commandsToCancel.push_back(std::move(cmd));
             }
             m_pendingCommands.clear();
+        }
+        
+        // Second pass: cancel commands outside of mutex to prevent deadlock
+        for (auto& cmd : commandsToCancel) {
+            try {
+                cmd->promise.set_exception(std::make_exception_ptr(
+                    std::runtime_error("Connection closed")));
+            }
+            catch (...) {
+                // Promise already set or moved - safe to ignore
+            }
         }
 
         // Platform-specific cleanup
         platformClose();
-        m_isOpen = false;
+        m_isOpen.store(false, std::memory_order_release);
         
         // Reset button state
-        m_lastButtonMask.store(0);
+        m_lastButtonMask.store(0, std::memory_order_release);
     }
 
     bool SerialPort::isOpen() const {
@@ -166,7 +186,8 @@ namespace makcu {
     std::future<std::string> SerialPort::sendTrackedCommand(const std::string& command,
         bool expectResponse,
         std::chrono::milliseconds timeout) {
-        if (!m_isOpen) {
+        // Check port status with atomic load to prevent race conditions
+        if (!m_isOpen.load(std::memory_order_acquire)) {
             std::promise<std::string> promise;
             promise.set_exception(std::make_exception_ptr(
                 std::runtime_error("Port not open")));
@@ -229,7 +250,8 @@ namespace makcu {
     }
 
     bool SerialPort::sendCommand(const std::string& command) {
-        if (!m_isOpen) {
+        // Check port status with atomic load to prevent race conditions
+        if (!m_isOpen.load(std::memory_order_acquire)) {
             return false;
         }
 
@@ -331,8 +353,11 @@ namespace makcu {
                 // Brief pause to prevent tight exception loops
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 
-                // Check if this is a critical error that should terminate the listener
-                // For now, we continue - most exceptions are recoverable
+                // Check if port is still open after exception
+                if (!m_isOpen.load(std::memory_order_acquire)) {
+                    // Port was closed, exit gracefully
+                    break;
+                }
             }
             catch (...) {
                 // Unknown exception - be more cautious
@@ -342,7 +367,11 @@ namespace makcu {
                 
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
                 
-                // For unknown exceptions, we still continue but with longer pause
+                // Check if port is still open after unknown exception
+                if (!m_isOpen.load(std::memory_order_acquire)) {
+                    // Port was closed, exit gracefully
+                    break;
+                }
             }
         }
     }
