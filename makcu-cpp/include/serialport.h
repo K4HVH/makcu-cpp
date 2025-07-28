@@ -46,6 +46,7 @@ namespace makcu {
         bool open(const std::string& port, uint32_t baudRate);
         void close();
         bool isOpen() const;
+        bool isActuallyConnected() const;
 
         bool setBaudRate(uint32_t baudRate);
         uint32_t getBaudRate() const;

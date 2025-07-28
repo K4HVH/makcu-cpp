@@ -20,6 +20,7 @@ void performanceTest() {
     std::cout << "\n=== PERFORMANCE TEST ===\n";
 
     makcu::Device device;
+    device.setConnectionCallback(connectionCallback);
     if (!device.connect()) {
         std::cout << "Failed to connect for performance test\n";
         return;
@@ -107,6 +108,7 @@ void gamingScenarioDemo() {
     std::cout << "\n=== GAMING SCENARIO DEMO ===\n";
 
     makcu::Device device;
+    device.setConnectionCallback(connectionCallback);
     if (!device.connect()) {
         std::cout << "Failed to connect for gaming demo\n";
         return;
@@ -148,6 +150,7 @@ void lockingDemo() {
     std::cout << "\n=== ADVANCED LOCKING DEMO ===\n";
 
     makcu::Device device;
+    device.setConnectionCallback(connectionCallback);
     if (!device.connect()) {
         std::cout << "Failed to connect for locking demo\n";
         return;
@@ -184,6 +187,7 @@ void dragMovementDemo() {
     std::cout << "\n=== DRAG MOVEMENT DEMO ===\n";
 
     makcu::Device device;
+    device.setConnectionCallback(connectionCallback);
     if (!device.connect()) {
         std::cout << "Failed to connect for drag demo\n";
         return;
@@ -237,6 +241,7 @@ void asyncDemo() {
 
     // Demonstrate async connection
     makcu::Device device;
+    device.setConnectionCallback(connectionCallback);
 
     std::cout << "Connecting asynchronously...\n";
     auto connectFuture = device.connectAsync();
