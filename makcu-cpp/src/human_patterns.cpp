@@ -10,7 +10,7 @@ namespace makcu {
         {Profile::PRECISION, {
             std::chrono::milliseconds(80), std::chrono::milliseconds(120),
             std::chrono::milliseconds(80), std::chrono::milliseconds(150),
-            2, 0.3, std::chrono::milliseconds(10), std::chrono::milliseconds(25),
+            1, 0.1, std::chrono::milliseconds(10), std::chrono::milliseconds(25),
             MovementCurve::EASE_IN_OUT, 15, 0.8,
             ClickVariation::CONSISTENT, 0.05,
             false, 0.0, 100,
@@ -23,12 +23,12 @@ namespace makcu {
             MovementCurve::BEZIER_NATURAL, 12, 1.0,
             ClickVariation::SLIGHT_VARIATION, 0.15,
             true, 0.1, 60,
-            false, 1.0, 8
+            true, 1.1, 8
         }},
         {Profile::GAMING, {
             std::chrono::milliseconds(15), std::chrono::milliseconds(35),
             std::chrono::milliseconds(25), std::chrono::milliseconds(55),
-            8, 0.8, std::chrono::milliseconds(3), std::chrono::milliseconds(8),
+            3, 0.2, std::chrono::milliseconds(3), std::chrono::milliseconds(8),
             MovementCurve::LINEAR, 8, 1.2,
             ClickVariation::MODERATE_VARIATION, 0.08,
             false, 0.0, 200,
@@ -41,7 +41,7 @@ namespace makcu {
             MovementCurve::EASE_OUT, 20, 0.6,
             ClickVariation::HIGH_VARIATION, 0.3,
             true, 0.4, 30,
-            false, 0.7, 15
+            false, 1.0, 15
         }},
         {Profile::CAFFEINATED, {
             std::chrono::milliseconds(25), std::chrono::milliseconds(60),
@@ -52,33 +52,6 @@ namespace makcu {
             false, 0.0, 150,
             true, 1.6, 2
         }},
-        {Profile::NERVOUS, {
-            std::chrono::milliseconds(40), std::chrono::milliseconds(90),
-            std::chrono::milliseconds(60), std::chrono::milliseconds(140),
-            20, 0.85, std::chrono::milliseconds(3), std::chrono::milliseconds(12),
-            MovementCurve::EASE_IN, 8, 1.1,
-            ClickVariation::HIGH_VARIATION, 0.25,
-            true, 0.2, 40,
-            false, 1.1, 6
-        }},
-        {Profile::FOCUSED, {
-            std::chrono::milliseconds(60), std::chrono::milliseconds(100),
-            std::chrono::milliseconds(70), std::chrono::milliseconds(120),
-            3, 0.2, std::chrono::milliseconds(8), std::chrono::milliseconds(15),
-            MovementCurve::EASE_IN_OUT, 14, 0.9,
-            ClickVariation::SLIGHT_VARIATION, 0.08,
-            true, 0.05, 80,
-            true, 1.1, 12
-        }},
-        {Profile::DISTRACTED, {
-            std::chrono::milliseconds(100), std::chrono::milliseconds(250),
-            std::chrono::milliseconds(150), std::chrono::milliseconds(350),
-            25, 0.75, std::chrono::milliseconds(10), std::chrono::milliseconds(50),
-            MovementCurve::BEZIER_NATURAL, 18, 0.7,
-            ClickVariation::CHAOTIC, 0.4,
-            true, 0.3, 35,
-            false, 0.8, 20
-        }}
     };
 
     HumanPatterns::HumanPatterns(Device* device)
@@ -251,9 +224,6 @@ namespace makcu {
         case Profile::GAMING: return "gaming";
         case Profile::SLEEPY: return "sleepy";
         case Profile::CAFFEINATED: return "caffeinated";
-        case Profile::NERVOUS: return "nervous";
-        case Profile::FOCUSED: return "focused";
-        case Profile::DISTRACTED: return "distracted";
         }
         return "casual";
     }
@@ -266,9 +236,6 @@ namespace makcu {
         if (lower == "gaming") return Profile::GAMING;
         if (lower == "sleepy") return Profile::SLEEPY;
         if (lower == "caffeinated") return Profile::CAFFEINATED;
-        if (lower == "nervous") return Profile::NERVOUS;
-        if (lower == "focused") return Profile::FOCUSED;
-        if (lower == "distracted") return Profile::DISTRACTED;
         
         return Profile::CASUAL;
     }
