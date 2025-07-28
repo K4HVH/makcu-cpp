@@ -68,10 +68,7 @@ namespace makcu {
             CASUAL,
             GAMING,
             SLEEPY,
-            CAFFEINATED,
-            NERVOUS,
-            FOCUSED,
-            DISTRACTED
+            CAFFEINATED
         };
 
         explicit HumanPatterns(Device* device);
