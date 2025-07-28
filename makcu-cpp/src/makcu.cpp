@@ -121,13 +121,13 @@ namespace makcu {
         std::condition_variable monitoringCondition;
         std::mutex monitoringMutex;
         
-        // Safe thread cleanup without timeout-based detach
+        // Safe thread cleanup with timeout protection
         void cleanupMonitoringThread() {
             if (!monitoringThread.joinable()) {
                 return;
             }
             
-            // Signal thread to stop
+            // Signal thread to stop with memory barrier
             stopMonitoring.store(true, std::memory_order_release);
             
             // Wake up the monitoring thread immediately
@@ -136,8 +136,19 @@ namespace makcu {
                 monitoringCondition.notify_all();
             }
             
-            // Always wait for clean exit - no detach to prevent resource leaks
-            monitoringThread.join();
+            // Wait for thread to exit with timeout to prevent indefinite blocking
+            auto future = std::async(std::launch::async, [this]() {
+                monitoringThread.join();
+            });
+            
+            if (future.wait_for(std::chrono::milliseconds(2000)) == std::future_status::timeout) {
+                // Thread didn't exit cleanly within timeout
+                // This shouldn't happen with proper condition variable signaling, but handle it
+                #ifdef DEBUG
+                std::cerr << "Warning: Monitoring thread cleanup timeout, detaching thread" << std::endl;
+                #endif
+                monitoringThread.detach();
+            }
         }
 
         Impl() : serialPort(std::make_unique<SerialPort>())
@@ -241,27 +252,35 @@ namespace makcu {
             const int pollIncrement = 50;
             
             while (!stopMonitoring.load(std::memory_order_acquire)) {
-                if (!connected.load(std::memory_order_acquire)) {
+                // Double-check connection state with acquire semantics to ensure we see all updates
+                bool currentlyConnected = connected.load(std::memory_order_acquire);
+                if (!currentlyConnected) {
                     break;
                 }
                 
                 // Check actual connection status using platform-specific methods
-                if (!serialPort->isActuallyConnected()) {
-                    // Device disconnected - atomic state updates with proper memory ordering
-                    atomicStatus.store(ConnectionStatus::DISCONNECTED, std::memory_order_release);
-                    status = ConnectionStatus::DISCONNECTED;
-                    deviceInfo.isConnected = false;
-                    currentButtonMask.store(0, std::memory_order_release);
-                    lockStateCacheValid.store(false, std::memory_order_release);
-                    buttonMonitoringEnabled.store(false, std::memory_order_release);
+                // Use a local variable to avoid multiple calls during state updates
+                bool actuallyConnected = serialPort->isActuallyConnected();
+                
+                if (!actuallyConnected) {
+                    // Device disconnected - use compare_exchange to prevent race conditions
+                    // Only update if we're still marked as connected
+                    bool expectedConnected = true;
+                    if (connected.compare_exchange_strong(expectedConnected, false, std::memory_order_acq_rel)) {
+                        // We successfully changed from connected to disconnected
+                        // Now update all other state atomically
+                        atomicStatus.store(ConnectionStatus::DISCONNECTED, std::memory_order_release);
+                        status = ConnectionStatus::DISCONNECTED;
+                        deviceInfo.isConnected = false;
+                        currentButtonMask.store(0, std::memory_order_release);
+                        lockStateCacheValid.store(false, std::memory_order_release);
+                        buttonMonitoringEnabled.store(false, std::memory_order_release);
+                        
+                        // Trigger callback after all state is updated
+                        notifyConnectionChange(false);
+                    }
                     
-                    // Set disconnected state last to signal other threads
-                    connected.store(false, std::memory_order_release);
-                    
-                    // Trigger callback
-                    notifyConnectionChange(false);
-                    
-                    // Exit the loop
+                    // Exit the loop regardless of who updated the state
                     break;
                 }
                 
@@ -555,20 +574,35 @@ namespace makcu {
             return false;
         }
 
-        // Update device info
+        // Update device info first
         m_impl->deviceInfo.port = targetPort;
         m_impl->deviceInfo.description = TARGET_DESC;
         m_impl->deviceInfo.vid = MAKCU_VID;
         m_impl->deviceInfo.pid = MAKCU_PID;
         m_impl->deviceInfo.isConnected = true;
 
+        // Atomically update all connection state before starting monitoring thread
+        m_impl->stopMonitoring.store(false, std::memory_order_release);
         m_impl->atomicStatus.store(ConnectionStatus::CONNECTED, std::memory_order_release);
         m_impl->status = ConnectionStatus::CONNECTED;
+        
+        // Use acquire-release semantics to ensure all state is visible before connected flag is set
+        std::atomic_thread_fence(std::memory_order_release);
         m_impl->connected.store(true, std::memory_order_release);
         
-        // Start connection monitoring thread
-        m_impl->stopMonitoring.store(false, std::memory_order_release);
-        m_impl->monitoringThread = std::thread(&Impl::connectionMonitoringLoop, m_impl.get());
+        // Start connection monitoring thread AFTER all state is established
+        // This prevents the monitoring thread from seeing inconsistent state
+        try {
+            m_impl->monitoringThread = std::thread(&Impl::connectionMonitoringLoop, m_impl.get());
+        } catch (const std::system_error& e) {
+            // Thread creation failed - cleanup and return error
+            m_impl->connected.store(false, std::memory_order_release);
+            m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
+            m_impl->status = ConnectionStatus::CONNECTION_ERROR;
+            m_impl->deviceInfo.isConnected = false;
+            m_impl->serialPort->close();
+            return false;
+        }
         
         m_impl->notifyConnectionChange(true);
 
@@ -597,21 +631,23 @@ namespace makcu {
         // Always clean up monitoring thread first, regardless of connection state
         m_impl->cleanupMonitoringThread();
 
-        // Check if already disconnected after thread cleanup
-        if (!m_impl->connected.load(std::memory_order_acquire)) {
+        // Use compare_exchange to prevent race conditions with monitoring thread
+        bool expectedConnected = true;
+        if (!m_impl->connected.compare_exchange_strong(expectedConnected, false, std::memory_order_acq_rel)) {
+            // Already disconnected by another thread (likely monitoring thread)
             return;
         }
 
-        // Set disconnected state first to signal other threads
-        m_impl->connected.store(false, std::memory_order_release);
+        // We successfully changed from connected to disconnected
+        // Update atomic status immediately
         m_impl->atomicStatus.store(ConnectionStatus::DISCONNECTED, std::memory_order_release);
 
-        // Then close the serial port
+        // Close the serial port
         if (m_impl->serialPort->isOpen()) {
             m_impl->serialPort->close();
         }
 
-        // Update remaining state
+        // Update remaining state after serial port is closed
         m_impl->status = ConnectionStatus::DISCONNECTED;
         m_impl->deviceInfo.isConnected = false;
         m_impl->currentButtonMask.store(0, std::memory_order_release);
