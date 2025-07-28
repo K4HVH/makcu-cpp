@@ -89,13 +89,13 @@ namespace makcu {
             return;
         }
 
-        // Stop listener thread (shared logic)
+        // Stop listener thread and wait for it to finish before canceling commands
         m_stopListener = true;
         if (m_listenerThread.joinable()) {
             m_listenerThread.join();
         }
 
-        // Cancel all pending commands (shared logic)
+        // Now safely cancel all pending commands - listener thread is stopped
         {
             std::lock_guard<std::mutex> cmdLock(m_commandMutex);
             for (auto& [id, cmd] : m_pendingCommands) {
@@ -104,7 +104,7 @@ namespace makcu {
                         std::runtime_error("Connection closed")));
                 }
                 catch (...) {
-                    // Promise already set
+                    // Promise already set or moved - safe to ignore
                 }
             }
             m_pendingCommands.clear();
@@ -113,6 +113,9 @@ namespace makcu {
         // Platform-specific cleanup
         platformClose();
         m_isOpen = false;
+        
+        // Reset button state
+        m_lastButtonMask.store(0);
     }
 
     bool SerialPort::isOpen() const {
@@ -170,6 +173,15 @@ namespace makcu {
             return promise.get_future();
         }
 
+        // Command length validation
+        constexpr size_t MAX_COMMAND_LENGTH = 512;
+        if (command.length() > MAX_COMMAND_LENGTH) {
+            std::promise<std::string> promise;
+            promise.set_exception(std::make_exception_ptr(
+                std::runtime_error("Command too long (max " + std::to_string(MAX_COMMAND_LENGTH) + " chars)")));
+            return promise.get_future();
+        }
+
         int cmdId = generateCommandId();
         auto pendingCmd = std::make_unique<PendingCommand>(cmdId, command, expectResponse, timeout);
         auto future = pendingCmd->promise.get_future();
@@ -218,6 +230,15 @@ namespace makcu {
 
     bool SerialPort::sendCommand(const std::string& command) {
         if (!m_isOpen) {
+            return false;
+        }
+
+        // Command length validation
+        constexpr size_t MAX_COMMAND_LENGTH = 512;
+        if (command.length() > MAX_COMMAND_LENGTH) {
+            #ifdef DEBUG
+            std::cerr << "SerialPort: Command too long (" << command.length() << " > " << MAX_COMMAND_LENGTH << ")" << std::endl;
+            #endif
             return false;
         }
 
@@ -281,6 +302,12 @@ namespace makcu {
                         else if (byte != 0x0D) { // Ignore carriage return
                             if (linePos < LINE_BUFFER_SIZE - 1) {
                                 lineBuffer[linePos++] = byte;
+                            } else {
+                                // Buffer overflow protection - discard line and reset
+                                #ifdef DEBUG
+                                std::cerr << "SerialPort: Line buffer overflow, discarding data" << std::endl;
+                                #endif
+                                linePos = 0;
                             }
                         }
                     }
@@ -294,8 +321,28 @@ namespace makcu {
                 }
 
             }
-            catch (const std::exception&) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            catch (const std::exception& e) {
+                // Log specific exception for debugging but continue running
+                // In production, you might want to use a proper logging framework
+                #ifdef DEBUG
+                std::cerr << "SerialPort listener exception: " << e.what() << std::endl;
+                #endif
+                
+                // Brief pause to prevent tight exception loops
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                
+                // Check if this is a critical error that should terminate the listener
+                // For now, we continue - most exceptions are recoverable
+            }
+            catch (...) {
+                // Unknown exception - be more cautious
+                #ifdef DEBUG
+                std::cerr << "SerialPort listener unknown exception" << std::endl;
+                #endif
+                
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                
+                // For unknown exceptions, we still continue but with longer pause
             }
         }
     }
