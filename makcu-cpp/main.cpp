@@ -250,10 +250,6 @@ void humanLikePatternsDemo() {
     patterns->clickHumanLike(makcu::MouseButton::LEFT, 2, makcu::HumanPatterns::Profile::SLEEPY);
     std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 
-    std::cout << "   NERVOUS profile (high jitter, variable timing)...\n";
-    patterns->clickHumanLike(makcu::MouseButton::LEFT, 4, makcu::HumanPatterns::Profile::NERVOUS);
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
     // Test 2: Advanced movement curves
     std::cout << "2. Testing advanced movement curves...\n";
     
@@ -286,10 +282,6 @@ void humanLikePatternsDemo() {
     std::cout << "   Casual scroll (3 steps)...\n";
     patterns->scrollHumanLike(5, 3, makcu::HumanPatterns::Profile::CASUAL);
     std::this_thread::sleep_for(std::chrono::milliseconds(600));
-
-    std::cout << "   Nervous scroll (many small steps)...\n";
-    patterns->scrollHumanLike(-3, 5, makcu::HumanPatterns::Profile::NERVOUS);
-    std::this_thread::sleep_for(std::chrono::milliseconds(800));
 
     // Test 5: Fatigue simulation
     std::cout << "5. Testing fatigue simulation...\n";
@@ -329,8 +321,8 @@ void humanLikePatternsDemo() {
     device.click(makcu::MouseButton::RIGHT);
     device.mouseWheel(2);
     
-    std::cout << "   Back to human-like with distracted profile...\n";
-    patterns->clickHumanLike(makcu::MouseButton::MIDDLE, 1, makcu::HumanPatterns::Profile::DISTRACTED);
+    std::cout << "   Back to human-like with sleepy profile...\n";
+    patterns->clickHumanLike(makcu::MouseButton::MIDDLE, 1, makcu::HumanPatterns::Profile::SLEEPY);
 
     // Test 8: Custom profile creation
     std::cout << "8. Testing custom profile creation...\n";
