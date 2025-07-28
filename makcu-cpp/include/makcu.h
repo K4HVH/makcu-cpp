@@ -145,6 +145,12 @@ namespace makcu {
         bool mouseMoveBezier(int32_t x, int32_t y, uint32_t segments,
             int32_t ctrl_x, int32_t ctrl_y);
 
+        // High-performance drag operations
+        bool mouseDrag(MouseButton button, int32_t x, int32_t y);
+        bool mouseDragSmooth(MouseButton button, int32_t x, int32_t y, uint32_t segments = 10);
+        bool mouseDragBezier(MouseButton button, int32_t x, int32_t y, uint32_t segments = 20,
+            int32_t ctrl_x = 0, int32_t ctrl_y = 0);
+
 
         // Mouse wheel
         bool mouseWheel(int32_t delta);
@@ -209,10 +215,17 @@ namespace makcu {
         class BatchCommandBuilder {
         public:
             BatchCommandBuilder& move(int32_t x, int32_t y);
+            BatchCommandBuilder& moveSmooth(int32_t x, int32_t y, uint32_t segments = 10);
+            BatchCommandBuilder& moveBezier(int32_t x, int32_t y, uint32_t segments = 20,
+                int32_t ctrl_x = 0, int32_t ctrl_y = 0);
             BatchCommandBuilder& click(MouseButton button);
             BatchCommandBuilder& press(MouseButton button);
             BatchCommandBuilder& release(MouseButton button);
             BatchCommandBuilder& scroll(int32_t delta);
+            BatchCommandBuilder& drag(MouseButton button, int32_t x, int32_t y);
+            BatchCommandBuilder& dragSmooth(MouseButton button, int32_t x, int32_t y, uint32_t segments = 10);
+            BatchCommandBuilder& dragBezier(MouseButton button, int32_t x, int32_t y, uint32_t segments = 20,
+                int32_t ctrl_x = 0, int32_t ctrl_y = 0);
             bool execute();
 
         private:

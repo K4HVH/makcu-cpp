@@ -6,6 +6,7 @@
 #include <string>
 #include <cstring>
 #include <chrono>
+#include <future>
 
 #ifdef _WIN32
 #include <setupapi.h>
@@ -22,6 +23,7 @@
 #include <regex>
 #include <libudev.h>
 #include <errno.h>
+#include <poll.h>
 #endif
 
 namespace makcu {
@@ -88,43 +90,116 @@ namespace makcu {
             return;
         }
 
-        // Stop listener thread (shared logic)
-        m_stopListener = true;
+        // Stop listener thread first
+        m_stopListener.store(true, std::memory_order_release);
+        
+        // Wait for listener thread to finish with timeout protection
         if (m_listenerThread.joinable()) {
-            m_listenerThread.join();
+            // Use a timeout to prevent indefinite blocking
+            auto future = std::async(std::launch::async, [this]() {
+                m_listenerThread.join();
+            });
+            
+            if (future.wait_for(std::chrono::milliseconds(1000)) == std::future_status::timeout) {
+                // Thread didn't exit cleanly - this is a serious issue but we must continue cleanup
+                // The thread will be destroyed when the object is destroyed
+                m_listenerThread.detach();
+            }
         }
 
-        // Cancel all pending commands (shared logic)
+        // Cancel all pending commands with double-checked locking for safety
+        // First pass: mark all commands as cancelled to prevent new promise operations
+        std::vector<std::unique_ptr<PendingCommand>> commandsToCancel;
         {
             std::lock_guard<std::mutex> cmdLock(m_commandMutex);
+            commandsToCancel.reserve(m_pendingCommands.size());
             for (auto& [id, cmd] : m_pendingCommands) {
-                try {
-                    cmd->promise.set_exception(std::make_exception_ptr(
-                        std::runtime_error("Connection closed")));
-                }
-                catch (...) {
-                    // Promise already set
-                }
+                commandsToCancel.push_back(std::move(cmd));
             }
             m_pendingCommands.clear();
+        }
+        
+        // Second pass: cancel commands outside of mutex to prevent deadlock
+        for (auto& cmd : commandsToCancel) {
+            try {
+                cmd->promise.set_exception(std::make_exception_ptr(
+                    std::runtime_error("Connection closed")));
+            }
+            catch (...) {
+                // Promise already set or moved - safe to ignore
+            }
         }
 
         // Platform-specific cleanup
         platformClose();
-        m_isOpen = false;
+        m_isOpen.store(false, std::memory_order_release);
+        
+        // Reset button state
+        m_lastButtonMask.store(0, std::memory_order_release);
     }
 
     bool SerialPort::isOpen() const {
         return m_isOpen;
     }
 
+    bool SerialPort::isActuallyConnected() const {
+        if (!m_isOpen) {
+            return false;
+        }
+
+#ifdef _WIN32
+        // Windows: Check if handle is still valid
+        if (m_handle == INVALID_HANDLE_VALUE) {
+            return false;
+        }
+        
+        // Try to get comm state to verify device is still there
+        DCB dcb;
+        return GetCommState(m_handle, &dcb) != 0;
+#else
+        // Linux: Check if file descriptor is still valid
+        if (m_fd < 0) {
+            return false;
+        }
+        
+        // Use poll to check if device is still connected
+        struct pollfd pfd;
+        pfd.fd = m_fd;
+        pfd.events = POLLERR | POLLHUP | POLLNVAL;
+        pfd.revents = 0;
+        
+        int result = poll(&pfd, 1, 0);  // Non-blocking check
+        
+        if (result < 0) {
+            return false;  // Error occurred
+        }
+        
+        // If any error conditions are set, device is disconnected
+        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            return false;
+        }
+        
+        return true;
+#endif
+    }
+
     std::future<std::string> SerialPort::sendTrackedCommand(const std::string& command,
         bool expectResponse,
         std::chrono::milliseconds timeout) {
-        if (!m_isOpen) {
+        // Check port status with atomic load to prevent race conditions
+        if (!m_isOpen.load(std::memory_order_acquire)) {
             std::promise<std::string> promise;
             promise.set_exception(std::make_exception_ptr(
                 std::runtime_error("Port not open")));
+            return promise.get_future();
+        }
+
+        // Command length validation
+        constexpr size_t MAX_COMMAND_LENGTH = 512;
+        if (command.length() > MAX_COMMAND_LENGTH) {
+            std::promise<std::string> promise;
+            promise.set_exception(std::make_exception_ptr(
+                std::runtime_error("Command too long (max " + std::to_string(MAX_COMMAND_LENGTH) + " chars)")));
             return promise.get_future();
         }
 
@@ -175,7 +250,17 @@ namespace makcu {
     }
 
     bool SerialPort::sendCommand(const std::string& command) {
-        if (!m_isOpen) {
+        // Check port status with atomic load to prevent race conditions
+        if (!m_isOpen.load(std::memory_order_acquire)) {
+            return false;
+        }
+
+        // Command length validation
+        constexpr size_t MAX_COMMAND_LENGTH = 512;
+        if (command.length() > MAX_COMMAND_LENGTH) {
+            #ifdef DEBUG
+            std::cerr << "SerialPort: Command too long (" << command.length() << " > " << MAX_COMMAND_LENGTH << ")" << std::endl;
+            #endif
             return false;
         }
 
@@ -239,6 +324,12 @@ namespace makcu {
                         else if (byte != 0x0D) { // Ignore carriage return
                             if (linePos < LINE_BUFFER_SIZE - 1) {
                                 lineBuffer[linePos++] = byte;
+                            } else {
+                                // Buffer overflow protection - discard line and reset
+                                #ifdef DEBUG
+                                std::cerr << "SerialPort: Line buffer overflow, discarding data" << std::endl;
+                                #endif
+                                linePos = 0;
                             }
                         }
                     }
@@ -252,8 +343,35 @@ namespace makcu {
                 }
 
             }
-            catch (const std::exception&) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            catch (const std::exception& e) {
+                // Log specific exception for debugging but continue running
+                // In production, you might want to use a proper logging framework
+                #ifdef DEBUG
+                std::cerr << "SerialPort listener exception: " << e.what() << std::endl;
+                #endif
+                
+                // Brief pause to prevent tight exception loops
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                
+                // Check if port is still open after exception
+                if (!m_isOpen.load(std::memory_order_acquire)) {
+                    // Port was closed, exit gracefully
+                    break;
+                }
+            }
+            catch (...) {
+                // Unknown exception - be more cautious
+                #ifdef DEBUG
+                std::cerr << "SerialPort listener unknown exception" << std::endl;
+                #endif
+                
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                
+                // Check if port is still open after unknown exception
+                if (!m_isOpen.load(std::memory_order_acquire)) {
+                    // Port was closed, exit gracefully
+                    break;
+                }
             }
         }
     }
