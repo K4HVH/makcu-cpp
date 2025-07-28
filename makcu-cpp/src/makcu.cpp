@@ -507,6 +507,85 @@ namespace makcu {
         return m_impl->executeCommand(command);
     }
 
+    // High-performance drag operations
+    bool Device::mouseDrag(MouseButton button, int32_t x, int32_t y) {
+        if (!m_impl->connected.load()) {
+            return false;
+        }
+
+        // Execute press, move, release sequence for optimal performance
+        auto pressIt = m_impl->commandCache.press_commands.find(button);
+        if (pressIt == m_impl->commandCache.press_commands.end()) {
+            return false;
+        }
+
+        auto releaseIt = m_impl->commandCache.release_commands.find(button);
+        if (releaseIt == m_impl->commandCache.release_commands.end()) {
+            return false;
+        }
+
+        // Execute drag sequence: press -> move -> release
+        bool result1 = m_impl->executeCommand(pressIt->second);
+        bool result2 = m_impl->executeMoveCommand(x, y);
+        bool result3 = m_impl->executeCommand(releaseIt->second);
+
+        return result1 && result2 && result3;
+    }
+
+    bool Device::mouseDragSmooth(MouseButton button, int32_t x, int32_t y, uint32_t segments) {
+        if (!m_impl->connected.load()) {
+            return false;
+        }
+
+        auto pressIt = m_impl->commandCache.press_commands.find(button);
+        if (pressIt == m_impl->commandCache.press_commands.end()) {
+            return false;
+        }
+
+        auto releaseIt = m_impl->commandCache.release_commands.find(button);
+        if (releaseIt == m_impl->commandCache.release_commands.end()) {
+            return false;
+        }
+
+        // Execute smooth drag sequence: press -> smooth move -> release
+        std::string moveCommand = "km.move(" + std::to_string(x) + "," +
+            std::to_string(y) + "," + std::to_string(segments) + ")";
+
+        bool result1 = m_impl->executeCommand(pressIt->second);
+        bool result2 = m_impl->executeCommand(moveCommand);
+        bool result3 = m_impl->executeCommand(releaseIt->second);
+
+        return result1 && result2 && result3;
+    }
+
+    bool Device::mouseDragBezier(MouseButton button, int32_t x, int32_t y, uint32_t segments,
+        int32_t ctrl_x, int32_t ctrl_y) {
+        if (!m_impl->connected.load()) {
+            return false;
+        }
+
+        auto pressIt = m_impl->commandCache.press_commands.find(button);
+        if (pressIt == m_impl->commandCache.press_commands.end()) {
+            return false;
+        }
+
+        auto releaseIt = m_impl->commandCache.release_commands.find(button);
+        if (releaseIt == m_impl->commandCache.release_commands.end()) {
+            return false;
+        }
+
+        // Execute bezier drag sequence: press -> bezier move -> release
+        std::string moveCommand = "km.move(" + std::to_string(x) + "," + std::to_string(y) + "," +
+            std::to_string(segments) + "," + std::to_string(ctrl_x) + "," +
+            std::to_string(ctrl_y) + ")";
+
+        bool result1 = m_impl->executeCommand(pressIt->second);
+        bool result2 = m_impl->executeCommand(moveCommand);
+        bool result3 = m_impl->executeCommand(releaseIt->second);
+
+        return result1 && result2 && result3;
+    }
+
 
 
 
@@ -854,6 +933,18 @@ namespace makcu {
         return *this;
     }
 
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::moveSmooth(int32_t x, int32_t y, uint32_t segments) {
+        m_commands.push_back("km.move(" + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(segments) + ")");
+        return *this;
+    }
+
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::moveBezier(int32_t x, int32_t y, uint32_t segments,
+        int32_t ctrl_x, int32_t ctrl_y) {
+        m_commands.push_back("km.move(" + std::to_string(x) + "," + std::to_string(y) + "," +
+            std::to_string(segments) + "," + std::to_string(ctrl_x) + "," + std::to_string(ctrl_y) + ")");
+        return *this;
+    }
+
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::click(MouseButton button) {
         auto& cache = m_device->m_impl->commandCache;
         auto pressIt = cache.press_commands.find(button);
@@ -886,6 +977,51 @@ namespace makcu {
 
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::scroll(int32_t delta) {
         m_commands.push_back("km.wheel(" + std::to_string(delta) + ")");
+        return *this;
+    }
+
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::drag(MouseButton button, int32_t x, int32_t y) {
+        auto& cache = m_device->m_impl->commandCache;
+        auto pressIt = cache.press_commands.find(button);
+        auto releaseIt = cache.release_commands.find(button);
+
+        if (pressIt != cache.press_commands.end() && releaseIt != cache.release_commands.end()) {
+            // Add press, move, release commands to batch (consistent with normal mouseDrag format)
+            m_commands.push_back(pressIt->second);
+            std::string moveCommand = "km.move(" + std::to_string(x) + "," + std::to_string(y) + ")";
+            m_commands.push_back(moveCommand);
+            m_commands.push_back(releaseIt->second);
+        }
+        return *this;
+    }
+
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::dragSmooth(MouseButton button, int32_t x, int32_t y, uint32_t segments) {
+        auto& cache = m_device->m_impl->commandCache;
+        auto pressIt = cache.press_commands.find(button);
+        auto releaseIt = cache.release_commands.find(button);
+
+        if (pressIt != cache.press_commands.end() && releaseIt != cache.release_commands.end()) {
+            // Add press, smooth move, release commands to batch
+            m_commands.push_back(pressIt->second);
+            m_commands.push_back("km.move(" + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(segments) + ")");
+            m_commands.push_back(releaseIt->second);
+        }
+        return *this;
+    }
+
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::dragBezier(MouseButton button, int32_t x, int32_t y, uint32_t segments,
+        int32_t ctrl_x, int32_t ctrl_y) {
+        auto& cache = m_device->m_impl->commandCache;
+        auto pressIt = cache.press_commands.find(button);
+        auto releaseIt = cache.release_commands.find(button);
+
+        if (pressIt != cache.press_commands.end() && releaseIt != cache.release_commands.end()) {
+            // Add press, bezier move, release commands to batch
+            m_commands.push_back(pressIt->second);
+            m_commands.push_back("km.move(" + std::to_string(x) + "," + std::to_string(y) + "," +
+                std::to_string(segments) + "," + std::to_string(ctrl_x) + "," + std::to_string(ctrl_y) + ")");
+            m_commands.push_back(releaseIt->second);
+        }
         return *this;
     }
 
