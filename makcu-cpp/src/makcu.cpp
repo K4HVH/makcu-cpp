@@ -9,6 +9,7 @@
 #include <atomic>
 #include <mutex>
 #include <unordered_map>
+#include <condition_variable>
 
 namespace makcu {
 
@@ -106,31 +107,37 @@ namespace makcu {
         Device::MouseButtonCallback mouseButtonCallback;
         Device::ConnectionCallback connectionCallback;
 
-        // Pre-allocated string buffers for move commands
+        // Pre-allocated string buffers for different command types
         mutable std::string moveCommandBuffer;
-        mutable std::mutex moveBufferMutex;
+        mutable std::string smoothCommandBuffer;
+        mutable std::string bezierCommandBuffer;
+        mutable std::string wheelCommandBuffer;
+        mutable std::string generalCommandBuffer;
+        mutable std::mutex commandBufferMutex;
 
         // Connection monitoring
         std::thread monitoringThread;
         std::atomic<bool> stopMonitoring{false};
+        std::condition_variable monitoringCondition;
+        std::mutex monitoringMutex;
         
-        // Safe thread cleanup with timeout
+        // Safe thread cleanup without timeout-based detach
         void cleanupMonitoringThread() {
-            stopMonitoring.store(true, std::memory_order_release);
-            if (monitoringThread.joinable()) {
-                // Try to join with timeout
-                std::atomic<bool> threadExited{false};
-                auto future = std::async(std::launch::async, [&]() {
-                    monitoringThread.join();
-                    threadExited.store(true, std::memory_order_release);
-                });
-                
-                if (future.wait_for(std::chrono::milliseconds(750)) == std::future_status::timeout) {
-                    // Thread didn't exit cleanly - this shouldn't happen with our implementation
-                    // but provides safety net
-                    monitoringThread.detach();
-                }
+            if (!monitoringThread.joinable()) {
+                return;
             }
+            
+            // Signal thread to stop
+            stopMonitoring.store(true, std::memory_order_release);
+            
+            // Wake up the monitoring thread immediately
+            {
+                std::lock_guard<std::mutex> lock(monitoringMutex);
+                monitoringCondition.notify_all();
+            }
+            
+            // Always wait for clean exit - no detach to prevent resource leaks
+            monitoringThread.join();
         }
 
         Impl() : serialPort(std::make_unique<SerialPort>())
@@ -138,6 +145,13 @@ namespace makcu {
             , connected(false)
             , highPerformanceMode(false) {
             deviceInfo.isConnected = false;
+
+            // Pre-allocate command buffers to avoid frequent allocations
+            moveCommandBuffer.reserve(128);
+            smoothCommandBuffer.reserve(128);
+            bezierCommandBuffer.reserve(192);
+            wheelCommandBuffer.reserve(64);
+            generalCommandBuffer.reserve(256);
 
             // Set up button callback for serial port
             serialPort->setButtonCallback([this](uint8_t button, bool pressed) {
@@ -251,8 +265,15 @@ namespace makcu {
                     break;
                 }
                 
+                // Use condition variable for interruptible sleep with exponential backoff
+                std::unique_lock<std::mutex> lock(monitoringMutex);
+                if (monitoringCondition.wait_for(lock, std::chrono::milliseconds(pollInterval),
+                    [this] { return stopMonitoring.load(std::memory_order_acquire); })) {
+                    // Condition was signaled (stop requested)
+                    break;
+                }
+                
                 // Exponential backoff to reduce CPU usage
-                std::this_thread::sleep_for(std::chrono::milliseconds(pollInterval));
                 pollInterval = std::min(maxPollInterval, pollInterval + pollIncrement);
             }
         }
@@ -284,11 +305,22 @@ namespace makcu {
         }
 
 
-        // Optimized move command with buffer reuse
+        // Optimized move command with buffer reuse and bounds checking
         bool executeMoveCommand(int32_t x, int32_t y) {
-            std::lock_guard<std::mutex> lock(moveBufferMutex);
+            // Validate coordinate ranges to prevent buffer overflow
+            constexpr int32_t MAX_COORD = 32767;
+            constexpr int32_t MIN_COORD = -32768;
+            
+            if (x < MIN_COORD || x > MAX_COORD || y < MIN_COORD || y > MAX_COORD) {
+                #ifdef DEBUG
+                std::cerr << "Move coordinates out of range: (" << x << "," << y << ")" << std::endl;
+                #endif
+                return false;
+            }
+            
+            std::lock_guard<std::mutex> lock(commandBufferMutex);
             moveCommandBuffer.clear();
-            moveCommandBuffer.reserve(32); // Pre-allocate reasonable size
+            moveCommandBuffer.reserve(64); // Increased buffer size for safety
 
             moveCommandBuffer = "km.move(";
             moveCommandBuffer += std::to_string(x);
@@ -296,7 +328,88 @@ namespace makcu {
             moveCommandBuffer += std::to_string(y);
             moveCommandBuffer += ")";
 
+            // Additional length check
+            if (moveCommandBuffer.length() > 512) {
+                return false;
+            }
+
             return executeCommand(moveCommandBuffer);
+        }
+
+        // Optimized smooth move command with buffer reuse
+        bool executeSmoothMoveCommand(int32_t x, int32_t y, uint32_t segments) {
+            // Validate inputs
+            constexpr int32_t MAX_COORD = 32767;
+            constexpr int32_t MIN_COORD = -32768;
+            
+            if (x < MIN_COORD || x > MAX_COORD || y < MIN_COORD || y > MAX_COORD) {
+                return false;
+            }
+            if (segments > 1000) { // Reasonable limit
+                return false;
+            }
+            
+            std::lock_guard<std::mutex> lock(commandBufferMutex);
+            smoothCommandBuffer.clear();
+
+            smoothCommandBuffer = "km.move(";
+            smoothCommandBuffer += std::to_string(x);
+            smoothCommandBuffer += ",";
+            smoothCommandBuffer += std::to_string(y);
+            smoothCommandBuffer += ",";
+            smoothCommandBuffer += std::to_string(segments);
+            smoothCommandBuffer += ")";
+
+            return executeCommand(smoothCommandBuffer);
+        }
+
+        // Optimized bezier move command with buffer reuse
+        bool executeBezierMoveCommand(int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x, int32_t ctrl_y) {
+            // Validate inputs
+            constexpr int32_t MAX_COORD = 32767;
+            constexpr int32_t MIN_COORD = -32768;
+            
+            if (x < MIN_COORD || x > MAX_COORD || y < MIN_COORD || y > MAX_COORD ||
+                ctrl_x < MIN_COORD || ctrl_x > MAX_COORD || ctrl_y < MIN_COORD || ctrl_y > MAX_COORD) {
+                return false;
+            }
+            if (segments > 1000) { // Reasonable limit
+                return false;
+            }
+            
+            std::lock_guard<std::mutex> lock(commandBufferMutex);
+            bezierCommandBuffer.clear();
+
+            bezierCommandBuffer = "km.move(";
+            bezierCommandBuffer += std::to_string(x);
+            bezierCommandBuffer += ",";
+            bezierCommandBuffer += std::to_string(y);
+            bezierCommandBuffer += ",";
+            bezierCommandBuffer += std::to_string(segments);
+            bezierCommandBuffer += ",";
+            bezierCommandBuffer += std::to_string(ctrl_x);
+            bezierCommandBuffer += ",";
+            bezierCommandBuffer += std::to_string(ctrl_y);
+            bezierCommandBuffer += ")";
+
+            return executeCommand(bezierCommandBuffer);
+        }
+
+        // Optimized wheel command with buffer reuse
+        bool executeWheelCommand(int32_t delta) {
+            // Validate wheel delta range
+            if (delta < -32768 || delta > 32767) {
+                return false;
+            }
+            
+            std::lock_guard<std::mutex> lock(commandBufferMutex);
+            wheelCommandBuffer.clear();
+
+            wheelCommandBuffer = "km.wheel(";
+            wheelCommandBuffer += std::to_string(delta);
+            wheelCommandBuffer += ")";
+
+            return executeCommand(wheelCommandBuffer);
         }
 
         // Cache-based lock state management
@@ -392,6 +505,17 @@ namespace makcu {
         if (!m_impl->switchToHighSpeedMode()) {
             m_impl->serialPort->close();
             m_impl->status = ConnectionStatus::CONNECTION_ERROR;
+            m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
+            m_impl->deviceInfo.isConnected = false;
+            return false;
+        }
+
+        // Validate connection after baud rate switch
+        if (!m_impl->serialPort->isOpen() || !m_impl->serialPort->isActuallyConnected()) {
+            m_impl->serialPort->close();
+            m_impl->status = ConnectionStatus::CONNECTION_ERROR;
+            m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
+            m_impl->deviceInfo.isConnected = false;
             return false;
         }
 
@@ -399,6 +523,35 @@ namespace makcu {
         if (!m_impl->initializeDevice()) {
             m_impl->serialPort->close();
             m_impl->status = ConnectionStatus::CONNECTION_ERROR;
+            m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
+            m_impl->deviceInfo.isConnected = false;
+            return false;
+        }
+
+        // Final validation that device is responsive
+        try {
+            // Test device responsiveness with a simple command
+            auto future = m_impl->serialPort->sendTrackedCommand("km.version()", true, 
+                std::chrono::milliseconds(100));
+            
+            // Wait for response with timeout
+            if (future.wait_for(std::chrono::milliseconds(150)) == std::future_status::timeout) {
+                m_impl->serialPort->close();
+                m_impl->status = ConnectionStatus::CONNECTION_ERROR;
+                m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
+                m_impl->deviceInfo.isConnected = false;
+                return false;
+            }
+            
+            // Get the result to ensure no exception
+            future.get();
+        }
+        catch (...) {
+            // Device not responding properly
+            m_impl->serialPort->close();
+            m_impl->status = ConnectionStatus::CONNECTION_ERROR;
+            m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
+            m_impl->deviceInfo.isConnected = false;
             return false;
         }
 
@@ -441,23 +594,31 @@ namespace makcu {
     void Device::disconnect() {
         std::lock_guard<std::mutex> lock(m_impl->mutex);
 
+        // Always clean up monitoring thread first, regardless of connection state
+        m_impl->cleanupMonitoringThread();
+
+        // Check if already disconnected after thread cleanup
         if (!m_impl->connected.load(std::memory_order_acquire)) {
-            // Still need to clean up monitoring thread if it exists
-            m_impl->cleanupMonitoringThread();
             return;
         }
 
-        // Clean up monitoring thread safely
-        m_impl->cleanupMonitoringThread();
-
-        m_impl->serialPort->close();
-        m_impl->atomicStatus.store(ConnectionStatus::DISCONNECTED, std::memory_order_release);
+        // Set disconnected state first to signal other threads
         m_impl->connected.store(false, std::memory_order_release);
+        m_impl->atomicStatus.store(ConnectionStatus::DISCONNECTED, std::memory_order_release);
+
+        // Then close the serial port
+        if (m_impl->serialPort->isOpen()) {
+            m_impl->serialPort->close();
+        }
+
+        // Update remaining state
         m_impl->status = ConnectionStatus::DISCONNECTED;
         m_impl->deviceInfo.isConnected = false;
         m_impl->currentButtonMask.store(0, std::memory_order_release);
         m_impl->lockStateCacheValid.store(false, std::memory_order_release);
         m_impl->buttonMonitoringEnabled.store(false, std::memory_order_release);
+        
+        // Notify after all state is updated
         m_impl->notifyConnectionChange(false);
     }
 
@@ -565,9 +726,7 @@ namespace makcu {
             return false;
         }
 
-        std::string command = "km.move(" + std::to_string(x) + "," +
-            std::to_string(y) + "," + std::to_string(segments) + ")";
-        return m_impl->executeCommand(command);
+        return m_impl->executeSmoothMoveCommand(x, y, segments);
     }
 
     bool Device::mouseMoveBezier(int32_t x, int32_t y, uint32_t segments,
@@ -576,10 +735,7 @@ namespace makcu {
             return false;
         }
 
-        std::string command = "km.move(" + std::to_string(x) + "," + std::to_string(y) + "," +
-            std::to_string(segments) + "," + std::to_string(ctrl_x) + "," +
-            std::to_string(ctrl_y) + ")";
-        return m_impl->executeCommand(command);
+        return m_impl->executeBezierMoveCommand(x, y, segments, ctrl_x, ctrl_y);
     }
 
     // High-performance drag operations
@@ -623,11 +779,8 @@ namespace makcu {
         }
 
         // Execute smooth drag sequence: press -> smooth move -> release
-        std::string moveCommand = "km.move(" + std::to_string(x) + "," +
-            std::to_string(y) + "," + std::to_string(segments) + ")";
-
         bool result1 = m_impl->executeCommand(pressIt->second);
-        bool result2 = m_impl->executeCommand(moveCommand);
+        bool result2 = m_impl->executeSmoothMoveCommand(x, y, segments);
         bool result3 = m_impl->executeCommand(releaseIt->second);
 
         return result1 && result2 && result3;
@@ -650,12 +803,8 @@ namespace makcu {
         }
 
         // Execute bezier drag sequence: press -> bezier move -> release
-        std::string moveCommand = "km.move(" + std::to_string(x) + "," + std::to_string(y) + "," +
-            std::to_string(segments) + "," + std::to_string(ctrl_x) + "," +
-            std::to_string(ctrl_y) + ")";
-
         bool result1 = m_impl->executeCommand(pressIt->second);
-        bool result2 = m_impl->executeCommand(moveCommand);
+        bool result2 = m_impl->executeBezierMoveCommand(x, y, segments, ctrl_x, ctrl_y);
         bool result3 = m_impl->executeCommand(releaseIt->second);
 
         return result1 && result2 && result3;
@@ -669,8 +818,7 @@ namespace makcu {
             return false;
         }
 
-        std::string command = "km.wheel(" + std::to_string(delta) + ")";
-        return m_impl->executeCommand(command);
+        return m_impl->executeWheelCommand(delta);
     }
 
 
