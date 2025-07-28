@@ -22,6 +22,7 @@
 #include <regex>
 #include <libudev.h>
 #include <errno.h>
+#include <poll.h>
 #endif
 
 namespace makcu {
@@ -116,6 +117,47 @@ namespace makcu {
 
     bool SerialPort::isOpen() const {
         return m_isOpen;
+    }
+
+    bool SerialPort::isActuallyConnected() const {
+        if (!m_isOpen) {
+            return false;
+        }
+
+#ifdef _WIN32
+        // Windows: Check if handle is still valid
+        if (m_handle == INVALID_HANDLE_VALUE) {
+            return false;
+        }
+        
+        // Try to get comm state to verify device is still there
+        DCB dcb;
+        return GetCommState(m_handle, &dcb) != 0;
+#else
+        // Linux: Check if file descriptor is still valid
+        if (m_fd < 0) {
+            return false;
+        }
+        
+        // Use poll to check if device is still connected
+        struct pollfd pfd;
+        pfd.fd = m_fd;
+        pfd.events = POLLERR | POLLHUP | POLLNVAL;
+        pfd.revents = 0;
+        
+        int result = poll(&pfd, 1, 0);  // Non-blocking check
+        
+        if (result < 0) {
+            return false;  // Error occurred
+        }
+        
+        // If any error conditions are set, device is disconnected
+        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            return false;
+        }
+        
+        return true;
+#endif
     }
 
     std::future<std::string> SerialPort::sendTrackedCommand(const std::string& command,

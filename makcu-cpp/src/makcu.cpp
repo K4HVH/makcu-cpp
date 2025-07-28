@@ -109,6 +109,10 @@ namespace makcu {
         mutable std::string moveCommandBuffer;
         mutable std::mutex moveBufferMutex;
 
+        // Connection monitoring
+        std::thread monitoringThread;
+        std::atomic<bool> stopMonitoring{false};
+
         Impl() : serialPort(std::make_unique<SerialPort>())
             , status(ConnectionStatus::DISCONNECTED)
             , connected(false)
@@ -193,6 +197,32 @@ namespace makcu {
                 }
                 catch (...) {
                     // Ignore callback exceptions
+                }
+            }
+        }
+
+        void connectionMonitoringLoop() {
+            while (!stopMonitoring.load() && connected.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(150));
+                
+                if (!stopMonitoring.load() && connected.load()) {
+                    // Check actual connection status using platform-specific methods
+                    if (!serialPort->isActuallyConnected()) {
+                        // Device disconnected - update state first
+                        status = ConnectionStatus::DISCONNECTED;
+                        deviceInfo.isConnected = false;
+                        currentButtonMask.store(0);
+                        lockStateCacheValid.store(false);
+                        
+                        // Set disconnected state
+                        connected.store(false);
+                        
+                        // Trigger callback
+                        notifyConnectionChange(false);
+                        
+                        // Exit the loop
+                        break;
+                    }
                 }
             }
         }
@@ -351,6 +381,11 @@ namespace makcu {
 
         m_impl->connected.store(true);
         m_impl->status = ConnectionStatus::CONNECTED;
+        
+        // Start connection monitoring thread
+        m_impl->stopMonitoring.store(false);
+        m_impl->monitoringThread = std::thread(&Impl::connectionMonitoringLoop, m_impl.get());
+        
         m_impl->notifyConnectionChange(true);
 
         return true;
@@ -374,7 +409,18 @@ namespace makcu {
         std::lock_guard<std::mutex> lock(m_impl->mutex);
 
         if (!m_impl->connected.load()) {
+            // Still need to clean up monitoring thread if it exists
+            m_impl->stopMonitoring.store(true);
+            if (m_impl->monitoringThread.joinable()) {
+                m_impl->monitoringThread.join();
+            }
             return;
+        }
+
+        // Stop monitoring thread
+        m_impl->stopMonitoring.store(true);
+        if (m_impl->monitoringThread.joinable()) {
+            m_impl->monitoringThread.join();
         }
 
         m_impl->serialPort->close();
