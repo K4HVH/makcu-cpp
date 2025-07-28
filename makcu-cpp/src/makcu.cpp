@@ -86,8 +86,8 @@ namespace makcu {
         std::unique_ptr<SerialPort> serialPort;
         DeviceInfo deviceInfo;
         ConnectionStatus status;
+        std::atomic<ConnectionStatus> atomicStatus{ConnectionStatus::DISCONNECTED};
         std::atomic<bool> connected;
-        std::atomic<bool> monitoring;
         std::atomic<bool> highPerformanceMode;
         mutable std::mutex mutex;
 
@@ -100,6 +100,7 @@ namespace makcu {
 
         // Button state tracking
         std::atomic<uint8_t> currentButtonMask{ 0 };
+        std::atomic<bool> buttonMonitoringEnabled{ false };
 
         // Callbacks
         Device::MouseButtonCallback mouseButtonCallback;
@@ -112,11 +113,29 @@ namespace makcu {
         // Connection monitoring
         std::thread monitoringThread;
         std::atomic<bool> stopMonitoring{false};
+        
+        // Safe thread cleanup with timeout
+        void cleanupMonitoringThread() {
+            stopMonitoring.store(true, std::memory_order_release);
+            if (monitoringThread.joinable()) {
+                // Try to join with timeout
+                std::atomic<bool> threadExited{false};
+                auto future = std::async(std::launch::async, [&]() {
+                    monitoringThread.join();
+                    threadExited.store(true, std::memory_order_release);
+                });
+                
+                if (future.wait_for(std::chrono::milliseconds(750)) == std::future_status::timeout) {
+                    // Thread didn't exit cleanly - this shouldn't happen with our implementation
+                    // but provides safety net
+                    monitoringThread.detach();
+                }
+            }
+        }
 
         Impl() : serialPort(std::make_unique<SerialPort>())
             , status(ConnectionStatus::DISCONNECTED)
             , connected(false)
-            , monitoring(false)
             , highPerformanceMode(false) {
             deviceInfo.isConnected = false;
 
@@ -196,40 +215,51 @@ namespace makcu {
                     connectionCallback(isConnected);
                 }
                 catch (...) {
-                    // Ignore callback exceptions
+                    // Disable callback after exception to prevent spam
+                    connectionCallback = nullptr;
                 }
             }
         }
 
         void connectionMonitoringLoop() {
-            while (!stopMonitoring.load() && connected.load()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(150));
-                
-                if (!stopMonitoring.load() && connected.load()) {
-                    // Check actual connection status using platform-specific methods
-                    if (!serialPort->isActuallyConnected()) {
-                        // Device disconnected - update state first
-                        status = ConnectionStatus::DISCONNECTED;
-                        deviceInfo.isConnected = false;
-                        currentButtonMask.store(0);
-                        lockStateCacheValid.store(false);
-                        
-                        // Set disconnected state
-                        connected.store(false);
-                        
-                        // Trigger callback
-                        notifyConnectionChange(false);
-                        
-                        // Exit the loop
-                        break;
-                    }
+            int pollInterval = 150;
+            const int maxPollInterval = 500;
+            const int pollIncrement = 50;
+            
+            while (!stopMonitoring.load(std::memory_order_acquire)) {
+                if (!connected.load(std::memory_order_acquire)) {
+                    break;
                 }
+                
+                // Check actual connection status using platform-specific methods
+                if (!serialPort->isActuallyConnected()) {
+                    // Device disconnected - atomic state updates with proper memory ordering
+                    atomicStatus.store(ConnectionStatus::DISCONNECTED, std::memory_order_release);
+                    status = ConnectionStatus::DISCONNECTED;
+                    deviceInfo.isConnected = false;
+                    currentButtonMask.store(0, std::memory_order_release);
+                    lockStateCacheValid.store(false, std::memory_order_release);
+                    buttonMonitoringEnabled.store(false, std::memory_order_release);
+                    
+                    // Set disconnected state last to signal other threads
+                    connected.store(false, std::memory_order_release);
+                    
+                    // Trigger callback
+                    notifyConnectionChange(false);
+                    
+                    // Exit the loop
+                    break;
+                }
+                
+                // Exponential backoff to reduce CPU usage
+                std::this_thread::sleep_for(std::chrono::milliseconds(pollInterval));
+                pollInterval = std::min(maxPollInterval, pollInterval + pollIncrement);
             }
         }
 
         // High-performance command execution
         bool executeCommand(const std::string& command) {
-            if (!connected.load()) {
+            if (!connected.load(std::memory_order_acquire)) {
                 return false;
             }
 
@@ -379,11 +409,12 @@ namespace makcu {
         m_impl->deviceInfo.pid = MAKCU_PID;
         m_impl->deviceInfo.isConnected = true;
 
-        m_impl->connected.store(true);
+        m_impl->atomicStatus.store(ConnectionStatus::CONNECTED, std::memory_order_release);
         m_impl->status = ConnectionStatus::CONNECTED;
+        m_impl->connected.store(true, std::memory_order_release);
         
         // Start connection monitoring thread
-        m_impl->stopMonitoring.store(false);
+        m_impl->stopMonitoring.store(false, std::memory_order_release);
         m_impl->monitoringThread = std::thread(&Impl::connectionMonitoringLoop, m_impl.get());
         
         m_impl->notifyConnectionChange(true);
@@ -392,11 +423,13 @@ namespace makcu {
     }
 
     std::future<bool> Device::connectAsync(const std::string& port) {
-        // OPTIMIZED: Use immediate connection check for connected state
-        if (m_impl->connected.load()) {
-            auto promise = std::promise<bool>();
-            promise.set_value(true);
-            return promise.get_future();
+        // OPTIMIZED: Use immediate return for already connected state
+        if (m_impl->connected.load(std::memory_order_acquire)) {
+            // Create ready future more efficiently
+            std::packaged_task<bool()> task([]() { return true; });
+            auto future = task.get_future();
+            task();
+            return future;
         }
         
         // For actual connection, this is inherently I/O bound so thread is acceptable
@@ -408,37 +441,33 @@ namespace makcu {
     void Device::disconnect() {
         std::lock_guard<std::mutex> lock(m_impl->mutex);
 
-        if (!m_impl->connected.load()) {
+        if (!m_impl->connected.load(std::memory_order_acquire)) {
             // Still need to clean up monitoring thread if it exists
-            m_impl->stopMonitoring.store(true);
-            if (m_impl->monitoringThread.joinable()) {
-                m_impl->monitoringThread.join();
-            }
+            m_impl->cleanupMonitoringThread();
             return;
         }
 
-        // Stop monitoring thread
-        m_impl->stopMonitoring.store(true);
-        if (m_impl->monitoringThread.joinable()) {
-            m_impl->monitoringThread.join();
-        }
+        // Clean up monitoring thread safely
+        m_impl->cleanupMonitoringThread();
 
         m_impl->serialPort->close();
-        m_impl->connected.store(false);
+        m_impl->atomicStatus.store(ConnectionStatus::DISCONNECTED, std::memory_order_release);
+        m_impl->connected.store(false, std::memory_order_release);
         m_impl->status = ConnectionStatus::DISCONNECTED;
         m_impl->deviceInfo.isConnected = false;
-        m_impl->currentButtonMask.store(0);
-        m_impl->lockStateCacheValid.store(false);
+        m_impl->currentButtonMask.store(0, std::memory_order_release);
+        m_impl->lockStateCacheValid.store(false, std::memory_order_release);
+        m_impl->buttonMonitoringEnabled.store(false, std::memory_order_release);
         m_impl->notifyConnectionChange(false);
     }
 
 
     bool Device::isConnected() const {
-        return m_impl->connected.load();
+        return m_impl->connected.load(std::memory_order_acquire);
     }
 
     ConnectionStatus Device::getStatus() const {
-        return m_impl->status;
+        return m_impl->atomicStatus.load(std::memory_order_acquire);
     }
 
     DeviceInfo Device::getDeviceInfo() const {
@@ -858,16 +887,20 @@ namespace makcu {
 
     // Button monitoring methods
     bool Device::enableButtonMonitoring(bool enable) {
-        if (!m_impl->connected.load()) {
+        if (!m_impl->connected.load(std::memory_order_acquire)) {
             return false;
         }
 
         std::string command = enable ? "km.buttons(1)" : "km.buttons(0)";
-        return m_impl->executeCommand(command);
+        bool result = m_impl->executeCommand(command);
+        if (result) {
+            m_impl->buttonMonitoringEnabled.store(enable, std::memory_order_release);
+        }
+        return result;
     }
 
     bool Device::isButtonMonitoringEnabled() const {
-        return m_impl->monitoring.load();
+        return m_impl->buttonMonitoringEnabled.load(std::memory_order_acquire);
     }
 
     uint8_t Device::getButtonMask() const {
