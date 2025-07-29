@@ -133,7 +133,7 @@ jobs:
         RELEASE_EOF
         
         # Replace placeholder with actual changelog
-        sed -i "s|CHANGELOG_PLACEHOLDER|$(echo "$CHANGELOG" | sed 's/|/\\|/g')|g" release_body.md
+        sed -i "s|CHANGELOG_PLACEHOLDER|$(echo "$CHANGELOG" | sed 's/|/\\|/g/')|g/" release_body.md
         
         # Create the release
         gh release create "${{ steps.version_check.outputs.tag }}" \
