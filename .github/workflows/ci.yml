@@ -121,8 +121,6 @@ jobs:
         
         # Create release body directly
         cat > release_body.md << 'RELEASE_EOF'
-        High-performance C++ library for MAKCU mouse controllers.
-        
         RELEASE_EOF
         
         # Append changelog
