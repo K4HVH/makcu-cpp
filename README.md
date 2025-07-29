@@ -15,7 +15,7 @@ High-performance C++ library for MAKCU mouse controllers with cross-platform sup
 
 This project builds as a **shared/static library** that can be used by external applications:
 
-```
+```bash
 makcu-cpp/
 ├── makcu-cpp/
 │   ├── include/          # Public API headers
@@ -33,11 +33,13 @@ makcu-cpp/
 ## 🛠️ Prerequisites
 
 ### Windows
+
 - **Visual Studio 2019+** with C++17 support
 - **Windows 10/11**
 - **MAKCU Device** (VID:PID = 1A86:55D3)
 
 ### Linux
+
 - **GCC 7+ or Clang 6+** with C++17 support
 - **CMake 3.15+**
 - **libudev development files** (`libudev-dev` on Ubuntu/Debian)
@@ -46,9 +48,10 @@ makcu-cpp/
 
 ## 🔧 Building the Library
 
-### Linux
+### Linux builds
 
 **Install Dependencies:**
+
 ```bash
 # Ubuntu/Debian
 sudo apt-get update
@@ -62,6 +65,7 @@ sudo pacman -S base-devel cmake pkg-config systemd
 ```
 
 **Build Library:**
+
 ```bash
 git clone https://github.com/your-repo/makcu-cpp
 cd makcu-cpp
@@ -76,13 +80,15 @@ sudo make install
 ```
 
 **Using Build Script:**
+
 ```bash
 ./build.sh  # Automated build with dependency checking
 ```
 
-### Windows
+### Windows builds
 
 **Build with Visual Studio:**
+
 ```cmd
 git clone https://github.com/your-repo/makcu-cpp
 cd makcu-cpp
@@ -97,6 +103,7 @@ cmake --build . --target install
 ```
 
 **Using Build Script:**
+
 ```cmd
 build.bat  # Automated build with Visual Studio detection
 ```
@@ -107,7 +114,7 @@ build.bat  # Automated build with Visual Studio detection
 
 After installing the library, create your project with this structure:
 
-```
+```bash
 MyProject/
 ├── src/
 │   └── main.cpp
@@ -115,6 +122,7 @@ MyProject/
 ```
 
 **CMakeLists.txt:**
+
 ```cmake
 cmake_minimum_required(VERSION 3.15)
 project(MyMakcuApp VERSION 1.0.0 LANGUAGES CXX)
@@ -133,6 +141,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE makcu::makcu-cpp)
 ```
 
 **Your application code:**
+
 ```cpp
 // src/main.cpp
 #include <makcu.h>
@@ -164,6 +173,7 @@ int main() {
 ```
 
 **Build your project:**
+
 ```bash
 mkdir build && cd build
 cmake ..
@@ -177,6 +187,7 @@ cmake --build . --config Release  # Windows
 For simple projects without CMake:
 
 **Linux:**
+
 ```bash
 g++ -std=c++17 \
     -I/usr/local/include/makcu \
@@ -201,12 +212,14 @@ g++ -std=c++17 \
 
 ### Distribution Options
 
-**Option 1: System Installation** (Recommended)
+#### Option 1: System Installation (Recommended)
+
 - Install library system-wide (`make install`)
 - Users link against installed library
 - Smallest application size
 
-**Option 2: Portable Distribution**
+#### Option 2: Portable Distribution
+
 - Bundle library files with your application
 - Include headers, .lib/.dll (Windows) or .so/.a (Linux)
 - Self-contained but larger distribution
@@ -312,6 +325,7 @@ make
 ```
 
 The examples demonstrate:
+
 - **basic_usage.cpp**: Simple library usage
 - **demo.cpp**: Performance testing, gaming scenarios, drag operations, input locking, async operations
 
@@ -338,6 +352,7 @@ The examples demonstrate:
 ## 🔒 Advanced Features
 
 ### Input Locking
+
 ```cpp
 // Block physical input while maintaining software control
 device.lockMouseX(true);        // Block horizontal movement
@@ -354,6 +369,7 @@ if (device.isMouseLeftLocked()) {
 ```
 
 ### Event Monitoring
+
 ```cpp
 // Real-time button monitoring
 device.setMouseButtonCallback([](makcu::MouseButton button, bool pressed) {
@@ -366,6 +382,7 @@ device.enableButtonMonitoring(true);
 ```
 
 ### Performance Profiling
+
 ```cpp
 // Enable profiling
 makcu::PerformanceProfiler::enableProfiling(true);
@@ -418,6 +435,7 @@ cmake ..
 ## 🔧 Troubleshooting
 
 ### Linux Device Permissions
+
 ```bash
 # Add user to dialout group
 sudo usermod -a -G dialout $USER
@@ -429,17 +447,21 @@ ls -la /dev/ttyUSB* /dev/ttyACM*
 ```
 
 ### Windows Connection Issues
+
 - Check Device Manager for COM port
 - Verify VID:PID = 1A86:55D3
 - Try different USB ports
 
 ### Performance Optimization
+
 1. **Enable High-Performance Mode**
+
    ```cpp
    device.enableHighPerformanceMode(true);
    ```
 
 2. **Use Batch Commands**
+
    ```cpp
    auto batch = device.createBatch();
    // Add multiple commands
@@ -447,6 +469,7 @@ ls -la /dev/ttyUSB* /dev/ttyACM*
    ```
 
 3. **Cache State Queries**
+
    ```cpp
    // Fast (cached)
    bool locked = device.isMouseLeftLocked();
@@ -455,17 +478,20 @@ ls -la /dev/ttyUSB* /dev/ttyACM*
 ## 📝 API Reference
 
 ### Core Classes
+
 - `makcu::Device` - Main device control class
 - `makcu::Device::BatchCommandBuilder` - Batch command execution
 - `makcu::PerformanceProfiler` - Performance monitoring
 
 ### Mouse Operations
+
 - `click(MouseButton)` - Single click
 - `mouseMove(x, y)` - Instant movement  
 - `mouseMoveSmooth(x, y, segments)` - Smooth interpolated movement
 - `mouseWheel(delta)` - Scroll wheel
 
 ### State Management
+
 - `lockMouseX/Y/Left/Right(bool)` - Input locking
 - `isMouseXLocked()` etc. - Cached state queries
 - `mouseButtonState(button)` - Real-time button state
