@@ -67,14 +67,36 @@ jobs:
         
         if [ -z "$PREVIOUS_TAG" ]; then
           echo "No previous version tag found, getting all commits"
-          git log --pretty=format:"* %s" >> CHANGELOG.md
-          COMMIT_COUNT=$(git log --oneline | wc -l)
+          COMMIT_RANGE=""
         else
           echo "Previous tag found: $PREVIOUS_TAG"
           echo "Getting commits from $PREVIOUS_TAG to HEAD (all commits for this version)"
-          git log --pretty=format:"* %s" ${PREVIOUS_TAG}..HEAD >> CHANGELOG.md
-          COMMIT_COUNT=$(git log --oneline ${PREVIOUS_TAG}..HEAD | wc -l)
+          COMMIT_RANGE="${PREVIOUS_TAG}.."
         fi
+        
+        # Get commits with full messages, preserving line breaks
+        git log --reverse --pretty=format:"COMMIT_START%n%B%nCOMMIT_END" ${COMMIT_RANGE}HEAD > commits.tmp
+        
+        # Process commits to format with bullets and proper indentation
+        awk '
+        /^COMMIT_START$/ { in_commit = 1; first_line = 1; next }
+        /^COMMIT_END$/ { in_commit = 0; next }
+        in_commit && NF > 0 {
+          if (first_line) {
+            print "* " $0
+            first_line = 0
+          } else {
+            print "  " $0
+          }
+        }
+        in_commit && NF == 0 { print "  " }
+        ' commits.tmp >> CHANGELOG.md
+        
+        # Clean up
+        rm -f commits.tmp
+        
+        # Count commits for verification
+        COMMIT_COUNT=$(git log --oneline ${COMMIT_RANGE}HEAD | wc -l)
         
         # Debug: show what we found
         echo "Generated changelog:"
@@ -121,6 +143,8 @@ jobs:
         
         # Create release body directly
         cat > release_body.md << 'RELEASE_EOF'
+        High-performance C++ library for MAKCU mouse controllers.
+        
         RELEASE_EOF
         
         # Append changelog
