@@ -25,7 +25,7 @@ makcu-cpp/
 │   └── src/              # Library implementation
 ├── examples/             # Example applications
 │   ├── basic_usage.cpp   # Simple usage example
-│   ├── demo.cpp          # Comprehensive demo (performance tests, gaming scenarios)
+│   ├── demo.cpp          # Comprehensive demo
 │   └── CMakeLists.txt    # Builds examples against installed library
 └── CMakeLists.txt        # Library build configuration
 ```
@@ -101,37 +101,117 @@ cmake --build . --target install
 build.bat  # Automated build with Visual Studio detection
 ```
 
-## 📚 Using the Library
+## 📚 Using the Library in Your Project
 
 ### CMake Integration (Recommended)
 
-After installing the library, use it in your project:
+After installing the library, create your project with this structure:
 
+```
+MyProject/
+├── src/
+│   └── main.cpp
+└── CMakeLists.txt
+```
+
+**CMakeLists.txt:**
 ```cmake
 cmake_minimum_required(VERSION 3.15)
-project(my_makcu_app)
+project(MyMakcuApp VERSION 1.0.0 LANGUAGES CXX)
 
-# Find the installed library
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Find the MAKCU library
 find_package(makcu-cpp REQUIRED)
 
 # Create your executable
-add_executable(my_app main.cpp)
+add_executable(${PROJECT_NAME} src/main.cpp)
 
-# Link against the library
-target_link_libraries(my_app PRIVATE makcu::makcu-cpp)
+# Link against MAKCU library
+target_link_libraries(${PROJECT_NAME} PRIVATE makcu::makcu-cpp)
+```
+
+**Your application code:**
+```cpp
+// src/main.cpp
+#include <makcu.h>
+#include <iostream>
+
+int main() {
+    try {
+        makcu::Device device;
+        if (!device.connect()) {
+            std::cout << "Failed to connect to MAKCU device\n";
+            return 1;
+        }
+        
+        std::cout << "Connected! Firmware: " << device.getVersion() << "\n";
+        
+        // Your MAKCU operations
+        device.mouseMove(100, 0);
+        device.click(makcu::MouseButton::LEFT);
+        
+        device.disconnect();
+    }
+    catch (const makcu::MakcuException& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
+    
+    return 0;
+}
+```
+
+**Build your project:**
+```bash
+mkdir build && cd build
+cmake ..
+make  # Linux
+# OR
+cmake --build . --config Release  # Windows
 ```
 
 ### Manual Compilation
 
+For simple projects without CMake:
+
 **Linux:**
 ```bash
-g++ -std=c++17 your_app.cpp -lmakcu-cpp -lpthread -ludev
+g++ -std=c++17 \
+    -I/usr/local/include/makcu \
+    your_app.cpp \
+    -lmakcu-cpp \
+    -lpthread \
+    -ludev \
+    -o your_app
 ```
 
-**Windows:**
-```cmd
-cl /std:c++17 your_app.cpp makcu-cpp.lib setupapi.lib
-```
+**Windows (Visual Studio IDE):**
+
+1. **Create/Open your Visual Studio project**
+2. **Right-click your project** → Properties
+3. **Configuration Properties** → C/C++ → **General**
+   - Additional Include Directories: `C:\Program Files\makcu-cpp\include\makcu`
+4. **Configuration Properties** → Linker → **General**
+   - Additional Library Directories: `C:\Program Files\makcu-cpp\lib`
+5. **Configuration Properties** → Linker → **Input**
+   - Additional Dependencies: Add `makcu-cpp.lib` and `setupapi.lib`
+6. **Copy `makcu-cpp.dll`** next to your executable or ensure it's in PATH
+
+### Distribution Options
+
+**Option 1: System Installation** (Recommended)
+- Install library system-wide (`make install`)
+- Users link against installed library
+- Smallest application size
+
+**Option 2: Portable Distribution**
+- Bundle library files with your application
+- Include headers, .lib/.dll (Windows) or .so/.a (Linux)
+- Self-contained but larger distribution
+
+See `examples/README.md` for detailed integration guides and troubleshooting.
 
 ## 🚀 Quick Start
 
