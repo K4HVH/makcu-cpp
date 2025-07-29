@@ -61,31 +61,24 @@ jobs:
         
         echo "## Changes" > CHANGELOG.md
         
-        if [ "$IS_UPDATE" = "true" ]; then
-          echo "Updating existing release - getting commits since $TAG"
-          # For updates, get commits since the existing tag
-          git log --pretty=format:"* %s" ${TAG}..HEAD >> CHANGELOG.md
+        # For both new releases AND updates, we want all commits for this version
+        # Find the previous version tag (not the current one)
+        PREVIOUS_TAG=$(git tag -l "v*.*.*" | grep -v "^$TAG$" | sort -V | tail -n1)
+        
+        if [ -z "$PREVIOUS_TAG" ]; then
+          echo "No previous version tag found, getting all commits"
+          git log --pretty=format:"* %s" >> CHANGELOG.md
+          COMMIT_COUNT=$(git log --oneline | wc -l)
         else
-          echo "Creating new release - getting commits since previous version tag"
-          # For new releases, get all commits since the last version tag
-          PREVIOUS_TAG=$(git tag -l "v*.*.*" | sort -V | tail -n1)
-          
-          if [ -z "$PREVIOUS_TAG" ] || [ "$PREVIOUS_TAG" = "$TAG" ]; then
-            echo "No previous version tag found, getting all commits"
-            git log --pretty=format:"* %s" >> CHANGELOG.md
-          else
-            echo "Previous tag found: $PREVIOUS_TAG"
-            echo "Getting commits from $PREVIOUS_TAG to HEAD"
-            git log --pretty=format:"* %s" ${PREVIOUS_TAG}..HEAD >> CHANGELOG.md
-          fi
+          echo "Previous tag found: $PREVIOUS_TAG"
+          echo "Getting commits from $PREVIOUS_TAG to HEAD (all commits for this version)"
+          git log --pretty=format:"* %s" ${PREVIOUS_TAG}..HEAD >> CHANGELOG.md
+          COMMIT_COUNT=$(git log --oneline ${PREVIOUS_TAG}..HEAD | wc -l)
         fi
         
         # Debug: show what we found
         echo "Generated changelog:"
         cat CHANGELOG.md
-        
-        # Count commits for verification
-        COMMIT_COUNT=$(git log --oneline ${PREVIOUS_TAG:-}..HEAD | wc -l)
         echo "Total commits in range: $COMMIT_COUNT"
         
         # Encode changelog to base64 to avoid delimiter issues
