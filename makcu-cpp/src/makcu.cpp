@@ -293,7 +293,7 @@ namespace makcu {
                 }
                 
                 // Exponential backoff to reduce CPU usage
-                pollInterval = std::min(maxPollInterval, pollInterval + pollIncrement);
+                pollInterval = std::min<int>(maxPollInterval, pollInterval + pollIncrement);
             }
         }
 

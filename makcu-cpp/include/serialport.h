@@ -1,5 +1,6 @@
 #pragma once
 
+#include "makcu_export.h"
 #include <string>
 #include <vector>
 #include <atomic>
@@ -12,6 +13,9 @@
 
 #ifdef _WIN32
 #include <windows.h>
+// Define ssize_t for Windows compatibility
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
 #else
 #include <termios.h>
 #include <fcntl.h>
@@ -38,7 +42,7 @@ namespace makcu {
         }
     };
 
-    class SerialPort {
+    class MAKCU_API SerialPort {
     public:
         SerialPort();
         ~SerialPort();

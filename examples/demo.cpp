@@ -1,5 +1,5 @@
-#include "include/makcu.h"
-#include "include/serialport.h"
+#include <makcu.h>
+#include <serialport.h>
 #include <iostream>
 #include <thread>
 #include <chrono>

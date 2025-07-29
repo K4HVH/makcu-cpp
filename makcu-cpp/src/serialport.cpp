@@ -294,7 +294,7 @@ namespace makcu {
                 }
 
                 // Unified read operation
-                size_t bytesToRead = std::min(bytesAvailable, static_cast<size_t>(BUFFER_SIZE));
+                size_t bytesToRead = std::min<size_t>(bytesAvailable, static_cast<size_t>(BUFFER_SIZE));
                 ssize_t bytesRead = platformRead(readBuffer.data(), bytesToRead);
                 
                 if (bytesRead <= 0) {
