@@ -60,16 +60,19 @@ echo -e "${YELLOW}Building project...${NC}"
 make -j$(nproc)
 
 echo -e "${GREEN}=== Build completed successfully! ===${NC}"
-echo -e "${BLUE}Executable location: ${PWD}/bin/makcu-cpp${NC}"
+echo -e "${BLUE}Library location: ${PWD}/lib/${NC}"
 
-# Test if the executable was created
-if [ -f "bin/makcu-cpp" ]; then
-    echo -e "${GREEN}✓ Executable built successfully${NC}"
+# Test if the library was created
+if [ -f "lib/libmakcu-cpp.so" ] || [ -f "lib/libmakcu-cpp.a" ]; then
+    echo -e "${GREEN}✓ Library built successfully${NC}"
 else
-    echo -e "${RED}✗ Executable not found${NC}"
+    echo -e "${RED}✗ Library not found${NC}"
     exit 1
 fi
 
 echo ""
-echo -e "${BLUE}To run the demo:${NC}"
-echo -e "${YELLOW}cd build && ./bin/makcu-cpp${NC}"
+echo -e "${BLUE}To build and run examples:${NC}"
+echo -e "${YELLOW}sudo make install${NC}"
+echo -e "${YELLOW}cd ../examples && mkdir build && cd build${NC}"
+echo -e "${YELLOW}cmake .. && make${NC}"
+echo -e "${YELLOW}./bin/basic_usage  # or ./bin/demo${NC}"

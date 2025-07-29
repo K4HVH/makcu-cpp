@@ -1,5 +1,6 @@
 #pragma once
 
+#include "makcu_export.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -73,7 +74,7 @@ namespace makcu {
     };
 
     // Exception classes
-    class MakcuException : public std::exception {
+    class MAKCU_API MakcuException : public std::exception {
     public:
         explicit MakcuException(const std::string& message) : m_message(message) {}
         const char* what() const noexcept override { return m_message.c_str(); }
@@ -81,21 +82,21 @@ namespace makcu {
         std::string m_message;
     };
 
-    class ConnectionException : public MakcuException {
+    class MAKCU_API ConnectionException : public MakcuException {
     public:
         explicit ConnectionException(const std::string& message)
             : MakcuException("Connection error: " + message) {
         }
     };
 
-    class CommandException : public MakcuException {
+    class MAKCU_API CommandException : public MakcuException {
     public:
         explicit CommandException(const std::string& message)
             : MakcuException("Command error: " + message) {
         }
     };
 
-    class TimeoutException : public MakcuException {
+    class MAKCU_API TimeoutException : public MakcuException {
     public:
         explicit TimeoutException(const std::string& message)
             : MakcuException("Timeout error: " + message) {
@@ -103,7 +104,7 @@ namespace makcu {
     };
 
     // Main Device class - High Performance MAKCU Mouse Controller
-    class Device {
+    class MAKCU_API Device {
     public:
         // Callback types
         using MouseButtonCallback = std::function<void(MouseButton, bool)>;
@@ -212,7 +213,7 @@ namespace makcu {
         bool isHighPerformanceModeEnabled() const;
 
         // Command batching for maximum performance
-        class BatchCommandBuilder {
+        class MAKCU_API BatchCommandBuilder {
         public:
             BatchCommandBuilder& move(int32_t x, int32_t y);
             BatchCommandBuilder& moveSmooth(int32_t x, int32_t y, uint32_t segments = 10);
@@ -252,11 +253,11 @@ namespace makcu {
     };
 
     // Utility functions
-    std::string mouseButtonToString(MouseButton button);
-    MouseButton stringToMouseButton(const std::string& buttonName);
+    MAKCU_API std::string mouseButtonToString(MouseButton button);
+    MAKCU_API MouseButton stringToMouseButton(const std::string& buttonName);
 
     // Performance profiling utilities
-    class PerformanceProfiler {
+    class MAKCU_API PerformanceProfiler {
     private:
         static std::atomic<bool> s_enabled;
         static std::mutex s_mutex;

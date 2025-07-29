@@ -1,5 +1,6 @@
 #pragma once
 
+#include "makcu_export.h"
 #include <string>
 #include <vector>
 #include <atomic>
@@ -41,7 +42,7 @@ namespace makcu {
         }
     };
 
-    class SerialPort {
+    class MAKCU_API SerialPort {
     public:
         SerialPort();
         ~SerialPort();
