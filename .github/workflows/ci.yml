@@ -77,7 +77,7 @@ jobs:
         {
           echo 'changelog<<EOF'
           cat changelog.txt
-          echo 'EOF'
+          echo EOF
         } >> $GITHUB_OUTPUT
 
     - name: Create or update git tag
