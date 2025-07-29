@@ -12,11 +12,13 @@ This directory contains example applications and build scripts showing how to in
 ## 🚀 Quick Start
 
 **Linux:**
+
 ```bash
 ./build.sh
 ```
 
 **Windows:**
+
 ```cmd
 build.bat
 ```
@@ -27,7 +29,8 @@ build.bat
 
 This is the cleanest approach for CMake-based projects.
 
-**Step 1: Install MAKCU library system-wide**
+#### Step 1: Install MAKCU library system-wide
+
 ```bash
 # Linux
 cd /path/to/makcu-cpp
@@ -44,15 +47,17 @@ cmake --build . --config Release
 cmake --build . --target install
 ```
 
-**Step 2: Create your project**
-```
+#### Step 2: Create your project
+
+```bash
 MyProject/
 ├── src/
 │   └── main.cpp
 └── CMakeLists.txt
 ```
 
-**Step 3: CMakeLists.txt**
+#### Step 3: CMakeLists.txt
+
 ```cmake
 cmake_minimum_required(VERSION 3.15)
 project(MyMakcuApp VERSION 1.0.0 LANGUAGES CXX)
@@ -71,7 +76,8 @@ add_executable(${PROJECT_NAME} src/main.cpp)
 target_link_libraries(${PROJECT_NAME} PRIVATE makcu::makcu-cpp)
 ```
 
-**Step 4: Your application code**
+#### Step 4: Your application code
+
 ```cpp
 // src/main.cpp
 #include <makcu.h>
@@ -102,7 +108,8 @@ int main() {
 }
 ```
 
-**Step 5: Build your project**
+#### Step 5: Build your project
+
 ```bash
 mkdir build && cd build
 cmake ..
@@ -116,6 +123,7 @@ cmake --build . --config Release  # Windows
 For simple projects or when you don't want to use CMake.
 
 **Linux:**
+
 ```bash
 g++ -std=c++17 \
     -I/usr/local/include/makcu \
@@ -143,7 +151,8 @@ g++ -std=c++17 \
 For distributing your application with the library included.
 
 **Project Structure:**
-```
+
+```bash
 MyApp/
 ├── src/
 │   └── main.cpp
@@ -162,6 +171,7 @@ MyApp/
 ```
 
 **CMakeLists.txt for portable distribution:**
+
 ```cmake
 cmake_minimum_required(VERSION 3.15)
 project(MyMakcuApp)
@@ -202,30 +212,36 @@ endif()
 
 ### Common Issues
 
-**1. "makcu.h not found"**
+#### 1. "makcu.h not found"
+
 - Ensure library is installed: `sudo make install` (Linux) or `cmake --build . --target install` (Windows)
 - Check include paths in your build system
 
-**2. "cannot find -lmakcu-cpp" (Linux)**
+#### 2. "cannot find -lmakcu-cpp" (Linux)
+
 - Library not installed system-wide
 - Try: `sudo ldconfig` after installation
 - Check `/usr/local/lib` contains `libmakcu-cpp.so`
 
-**3. "unresolved external symbol" (Windows)**
+#### 3. "unresolved external symbol" (Windows)
+
 - Missing `makcu-cpp.lib` import library
 - Ensure you're linking against the `.lib` file, not the `.dll`
 
-**4. "DLL not found" at runtime (Windows)**
+#### 4. "DLL not found" at runtime (Windows)
+
 - `makcu-cpp.dll` not in PATH or application directory
 - Copy DLL next to your executable
 
-**5. CMake can't find the package**
+#### 5. CMake can't find the package**
+
 - Library not installed in standard CMake paths
 - Try: `cmake -DCMAKE_PREFIX_PATH=/path/to/installation ..`
 
 ### Verification Steps
 
 **1. Check installation:**
+
 ```bash
 # Linux
 ls -la /usr/local/lib/libmakcu-cpp*
@@ -240,6 +256,7 @@ dir "C:\Program Files\makcu-cpp\include\makcu\"
 Use the `basic_usage.cpp` example as a starting point for your integration.
 
 **3. Check library dependencies:**
+
 ```bash
 # Linux - check what libraries your executable needs
 ldd your_app
@@ -252,6 +269,7 @@ ldd your_app
 When you run the build scripts, you'll see executables created in `build/bin/`:
 
 **Running the examples:**
+
 ```bash
 # Linux
 ./build/bin/basic_usage
@@ -263,6 +281,7 @@ build\bin\Release\demo.exe
 ```
 
 The examples demonstrate:
+
 - **basic_usage**: Device connection, simple mouse operations
 - **demo**: Performance testing, gaming scenarios, advanced features
 
