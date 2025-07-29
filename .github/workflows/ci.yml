@@ -35,8 +35,10 @@ jobs:
           
           # Get commits since this tag
           NEW_COMMITS=$(git rev-list ${TAG}..HEAD --count)
+          echo "Found $NEW_COMMITS new commits since $TAG"
+          
           if [ "$NEW_COMMITS" -gt 0 ]; then
-            echo "Found $NEW_COMMITS new commits since $TAG, will update release"
+            echo "Will update release with new commits"
             echo "should_release=true" >> $GITHUB_OUTPUT
             echo "is_update=true" >> $GITHUB_OUTPUT
           else
@@ -59,23 +61,38 @@ jobs:
         TAG="${{ steps.version_check.outputs.tag }}"
         IS_UPDATE="${{ steps.version_check.outputs.is_update }}"
         
+        echo "Generating changelog for tag: $TAG"
+        echo "Is update: $IS_UPDATE"
+        
         if [ "$IS_UPDATE" = "true" ]; then
           # Update existing release - get commits since the tag
+          echo "Getting commits since existing tag $TAG"
+          git log --oneline ${TAG}..HEAD
           git log --pretty=format:"* %s" ${TAG}..HEAD > changes.txt
         else
           # New release - get all commits since previous version tag
           PREVIOUS_TAG=$(git tag -l "v*" | grep -v "^$TAG$" | sort -V | tail -n1)
+          echo "Previous tag: $PREVIOUS_TAG"
           
           if [ -z "$PREVIOUS_TAG" ]; then
+            echo "No previous tag found, this is initial release"
             echo "* Initial release" > changes.txt
           else
+            echo "Getting commits from $PREVIOUS_TAG to HEAD"
+            git log --oneline ${PREVIOUS_TAG}..HEAD
             git log --pretty=format:"* %s" ${PREVIOUS_TAG}..HEAD > changes.txt
           fi
         fi
         
-        # Convert to single line with proper escaping for GitHub Actions
-        CHANGELOG=$(cat changes.txt | sed ':a;N;$!ba;s/\n/%0A/g')
-        echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "Generated changelog:"
+        cat changes.txt
+        
+        # Use GitHub's multiline output format
+        {
+          echo 'changelog<<CHANGELOG_EOF'
+          cat changes.txt
+          echo 'CHANGELOG_EOF'
+        } >> $GITHUB_OUTPUT
 
     - name: Create or update git tag
       if: steps.version_check.outputs.should_release == 'true'
