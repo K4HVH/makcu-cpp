@@ -73,10 +73,12 @@ jobs:
           fi
         fi
         
-        # Set output using environment file
-        echo "changelog<<EOF" >> $GITHUB_OUTPUT
-        cat changelog.txt >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+        # Set output using proper multiline format
+        {
+          echo 'changelog<<EOF'
+          cat changelog.txt
+          echo 'EOF'
+        } >> $GITHUB_OUTPUT
 
     - name: Create or update git tag
       if: steps.version_check.outputs.should_release == 'true'
