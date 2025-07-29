@@ -12,6 +12,9 @@
 
 #ifdef _WIN32
 #include <windows.h>
+// Define ssize_t for Windows compatibility
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
 #else
 #include <termios.h>
 #include <fcntl.h>
