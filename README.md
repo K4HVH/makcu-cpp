@@ -24,12 +24,14 @@ sudo make install  # Install system-wide
 ## Integration
 
 Add to your CMakeLists.txt:
+
 ```cmake
 find_package(makcu-cpp REQUIRED)
 target_link_libraries(your_app PRIVATE makcu::makcu-cpp)
 ```
 
 Basic usage:
+
 ```cpp
 #include <makcu.h>
 
@@ -57,6 +59,7 @@ cd examples && ./build.sh  # Build examples
 ## Troubleshooting
 
 **Linux permissions:**
+
 ```bash
 sudo usermod -a -G dialout $USER
 ```
