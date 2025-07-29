@@ -13,7 +13,6 @@ jobs:
       is_update: ${{ steps.version_check.outputs.is_update }}
       version: ${{ steps.version_check.outputs.version }}
       tag: ${{ steps.version_check.outputs.tag }}
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -76,12 +75,9 @@ jobs:
           fi
         fi
         
-        # Read changelog into output
-        {
-          echo 'CHANGELOG<<EOF'
-          cat CHANGELOG.md
-          echo EOF
-        } >> $GITHUB_OUTPUT
+        # Base64 encode to avoid delimiter issues
+        CHANGELOG_B64=$(cat CHANGELOG.md | base64 -w 0)
+        echo "changelog_b64=$CHANGELOG_B64" >> $GITHUB_OUTPUT
 
     - name: Create or update git tag
       if: steps.version_check.outputs.should_release == 'true'
@@ -105,38 +101,47 @@ jobs:
       if: steps.version_check.outputs.should_release == 'true' && steps.version_check.outputs.is_update == 'true'
       run: |
         TAG="${{ steps.version_check.outputs.tag }}"
-        # Delete existing release
-        gh release delete "$TAG" --yes || true
+        # Delete existing release if it exists
+        gh release delete "$TAG" --yes || echo "Release $TAG did not exist"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Create Release
       if: steps.version_check.outputs.should_release == 'true'
       id: create_release
-      uses: actions/create-release@v1
+      run: |
+        # Decode changelog
+        echo "${{ steps.changelog.outputs.changelog_b64 }}" | base64 -d > CHANGELOG.md
+        
+        # Create release body
+        cat > RELEASE_BODY.md << 'BODY_EOF'
+        High-performance C++ library for MAKCU mouse controllers.
+
+        BODY_EOF
+        
+        cat CHANGELOG.md >> RELEASE_BODY.md
+        
+        cat >> RELEASE_BODY.md << 'BODY_EOF'
+
+        **Downloads:**
+        * Windows: `makcu-cpp-windows.zip`, `makcu-cpp-windows-installer.exe`
+        * Linux: `makcu-cpp-linux.tar.gz`, `makcu-cpp-linux.deb`, `makcu-cpp-linux.rpm`
+
+        **Quick Start:**
+        ```cpp
+        #include <makcu.h>
+        makcu::Device device;
+        device.connect();
+        device.mouseMove(100, 0);
+        ```
+        BODY_EOF
+        
+        # Create the release
+        gh release create "${{ steps.version_check.outputs.tag }}" \
+          --title "MAKCU C++ ${{ steps.version_check.outputs.tag }}" \
+          --notes-file RELEASE_BODY.md
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.version_check.outputs.tag }}
-        release_name: MAKCU C++ ${{ steps.version_check.outputs.tag }}
-        body: |
-          High-performance C++ library for MAKCU mouse controllers.
-          
-          ${{ steps.changelog.outputs.CHANGELOG }}
-          
-          **Downloads:**
-          * Windows: `makcu-cpp-windows.zip`, `makcu-cpp-windows-installer.exe`
-          * Linux: `makcu-cpp-linux.tar.gz`, `makcu-cpp-linux.deb`, `makcu-cpp-linux.rpm`
-          
-          **Quick Start:**
-          ```cpp
-          #include <makcu.h>
-          makcu::Device device;
-          device.connect();
-          device.mouseMove(100, 0);
-          ```
-        draft: false
-        prerelease: false
 
   build-windows:
     needs: check-and-release
@@ -164,24 +169,18 @@ jobs:
         cpack -G NSIS
 
     - name: Upload Windows ZIP
-      uses: actions/upload-release-asset@v1
+      run: |
+        gh release upload "${{ needs.check-and-release.outputs.tag }}" \
+          "./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-win64.zip#makcu-cpp-windows.zip"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.check-and-release.outputs.upload_url }}
-        asset_path: ./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-win64.zip
-        asset_name: makcu-cpp-windows.zip
-        asset_content_type: application/zip
 
     - name: Upload Windows Installer
-      uses: actions/upload-release-asset@v1
+      run: |
+        gh release upload "${{ needs.check-and-release.outputs.tag }}" \
+          "./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-win64.exe#makcu-cpp-windows-installer.exe"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.check-and-release.outputs.upload_url }}
-        asset_path: ./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-win64.exe
-        asset_name: makcu-cpp-windows-installer.exe
-        asset_content_type: application/octet-stream
 
   build-linux:
     needs: check-and-release
@@ -212,31 +211,22 @@ jobs:
         cpack -G RPM
 
     - name: Upload Linux TGZ
-      uses: actions/upload-release-asset@v1
+      run: |
+        gh release upload "${{ needs.check-and-release.outputs.tag }}" \
+          "./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-Linux.tar.gz#makcu-cpp-linux.tar.gz"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.check-and-release.outputs.upload_url }}
-        asset_path: ./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-Linux.tar.gz
-        asset_name: makcu-cpp-linux.tar.gz
-        asset_content_type: application/gzip
 
     - name: Upload DEB package
-      uses: actions/upload-release-asset@v1
+      run: |
+        gh release upload "${{ needs.check-and-release.outputs.tag }}" \
+          "./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-Linux.deb#makcu-cpp-linux.deb"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.check-and-release.outputs.upload_url }}
-        asset_path: ./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-Linux.deb
-        asset_name: makcu-cpp-linux.deb
-        asset_content_type: application/vnd.debian.binary-package
 
     - name: Upload RPM package
-      uses: actions/upload-release-asset@v1
+      run: |
+        gh release upload "${{ needs.check-and-release.outputs.tag }}" \
+          "./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-Linux.rpm#makcu-cpp-linux.rpm"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.check-and-release.outputs.upload_url }}
-        asset_path: ./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-Linux.rpm
-        asset_name: makcu-cpp-linux.rpm
-        asset_content_type: application/x-rpm
