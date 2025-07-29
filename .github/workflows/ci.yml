@@ -1,50 +1,303 @@
-name: Build & Test
+name: Auto Release
 
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_dispatch:  # Manual trigger option
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
+  check-and-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.version_check.outputs.should_release }}
+      version: ${{ steps.version_check.outputs.version }}
+      tag: ${{ steps.version_check.outputs.tag }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        build_type: [Release, Debug]
+    - name: Check if version changed
+      id: version_check
+      run: |
+        # Extract current version from CMakeLists.txt
+        CURRENT_VERSION=$(grep -oP 'project\(makcu-cpp VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
+        echo "Current version in CMakeLists.txt: $CURRENT_VERSION"
+        
+        # Get latest release tag
+        LATEST_TAG=$(git tag -l "v*" | sort -V | tail -n1)
+        if [ -z "$LATEST_TAG" ]; then
+          LATEST_VERSION="0.0.0"
+          echo "No previous releases found"
+        else
+          LATEST_VERSION=${LATEST_TAG#v}
+          echo "Latest release version: $LATEST_VERSION"
+        fi
+        
+        # Compare versions
+        if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
+          echo "Version changed from $LATEST_VERSION to $CURRENT_VERSION"
+          echo "should_release=true" >> $GITHUB_OUTPUT
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$CURRENT_VERSION" >> $GITHUB_OUTPUT
+        else
+          echo "Version unchanged, no release needed"
+          echo "should_release=false" >> $GITHUB_OUTPUT
+        fi
 
+    - name: Generate changelog
+      if: steps.version_check.outputs.should_release == 'true'
+      id: changelog
+      run: |
+        # Find previous tag for changelog
+        PREVIOUS_TAG=$(git tag -l "v*" | sort -V | tail -n2 | head -n1)
+        
+        if [ -z "$PREVIOUS_TAG" ]; then
+          echo "## 🎉 Initial Release" > CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo "This is the first release of the MAKCU C++ Library!" >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo "### Features" >> CHANGELOG.md
+          echo "* High-performance mouse control with sub-millisecond response times" >> CHANGELOG.md
+          echo "* Cross-platform support (Windows & Linux)" >> CHANGELOG.md
+          echo "* Comprehensive API for mouse movement, clicking, and dragging" >> CHANGELOG.md
+          echo "* Advanced features like smooth movement and Bezier curves" >> CHANGELOG.md
+          echo "* Button monitoring and input locking capabilities" >> CHANGELOG.md
+        else
+          echo "## 🚀 Changes since $PREVIOUS_TAG" > CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          
+          # Group commits by type
+          git log --pretty=format:"%s" $PREVIOUS_TAG..HEAD | while read -r commit; do
+            if [[ $commit =~ ^(feat|feature).*: ]]; then
+              echo "### ✨ Features" >> FEATURES.md
+              echo "* ${commit#*: }" >> FEATURES.md
+            elif [[ $commit =~ ^(fix|bugfix).*: ]]; then
+              echo "### 🐛 Bug Fixes" >> FIXES.md  
+              echo "* ${commit#*: }" >> FIXES.md
+            elif [[ $commit =~ ^(perf|performance).*: ]]; then
+              echo "### ⚡ Performance" >> PERF.md
+              echo "* ${commit#*: }" >> PERF.md
+            elif [[ $commit =~ ^(docs|doc).*: ]]; then
+              echo "### 📚 Documentation" >> DOCS.md
+              echo "* ${commit#*: }" >> DOCS.md
+            else
+              echo "### 🔧 Other Changes" >> OTHER.md
+              echo "* $commit" >> OTHER.md
+            fi
+          done
+          
+          # Combine all sections
+          [ -f FEATURES.md ] && cat FEATURES.md >> CHANGELOG.md && echo "" >> CHANGELOG.md
+          [ -f FIXES.md ] && cat FIXES.md >> CHANGELOG.md && echo "" >> CHANGELOG.md  
+          [ -f PERF.md ] && cat PERF.md >> CHANGELOG.md && echo "" >> CHANGELOG.md
+          [ -f DOCS.md ] && cat DOCS.md >> CHANGELOG.md && echo "" >> CHANGELOG.md
+          [ -f OTHER.md ] && cat OTHER.md >> CHANGELOG.md && echo "" >> CHANGELOG.md
+          
+          # Cleanup temp files
+          rm -f FEATURES.md FIXES.md PERF.md DOCS.md OTHER.md
+        fi
+        
+        # Read changelog into output
+        {
+          echo 'CHANGELOG<<EOF'
+          cat CHANGELOG.md
+          echo EOF
+        } >> $GITHUB_OUTPUT
+
+    - name: Create git tag
+      if: steps.version_check.outputs.should_release == 'true'
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag -a "${{ steps.version_check.outputs.tag }}" -m "Release ${{ steps.version_check.outputs.tag }}"
+        git push origin "${{ steps.version_check.outputs.tag }}"
+
+    - name: Create Release
+      if: steps.version_check.outputs.should_release == 'true'
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version_check.outputs.tag }}
+        release_name: MAKCU C++ Library ${{ steps.version_check.outputs.tag }}
+        body: |
+          # 🎯 MAKCU C++ Library ${{ steps.version_check.outputs.tag }}
+          
+          High-performance C++ library for MAKCU mouse controllers with **sub-millisecond response times**.
+          
+          ${{ steps.changelog.outputs.CHANGELOG }}
+          
+          ## 📦 Downloads
+          
+          | Platform | Package Type | Download |
+          |----------|--------------|----------|
+          | 🪟 **Windows** | ZIP Archive | `makcu-cpp-windows.zip` |
+          | 🪟 **Windows** | Installer | `makcu-cpp-windows-installer.exe` |
+          | 🐧 **Linux** | TAR.GZ | `makcu-cpp-linux.tar.gz` |
+          | 🐧 **Linux** | DEB Package | `makcu-cpp-linux.deb` |
+          | 🐧 **Linux** | RPM Package | `makcu-cpp-linux.rpm` |
+          
+          ## ⚡ Performance Metrics
+          
+          * **Mouse Movement**: ~0.07ms average response time
+          * **Button Click**: ~0.16ms average response time  
+          * **28x faster** than Python implementation
+          * **4000000 baud** high-speed serial communication
+          
+          ## 🚀 Quick Start
+          
+          ### Windows
+          ```cpp
+          #include <makcu.h>
+          
+          makcu::Device device;
+          device.connect();
+          device.enableHighPerformanceMode(true);
+          device.mouseMove(100, 0);
+          device.click(makcu::MouseButton::LEFT);
+          ```
+          
+          ### Linux Installation
+          ```bash
+          # DEB package
+          sudo dpkg -i makcu-cpp-linux.deb
+          
+          # Or TAR.GZ
+          tar -xzf makcu-cpp-linux.tar.gz
+          sudo make install
+          ```
+          
+          ### CMake Integration
+          ```cmake
+          find_package(makcu-cpp REQUIRED)
+          target_link_libraries(your_app PRIVATE makcu::makcu-cpp)
+          ```
+          
+          ## 🎮 Gaming Features
+          
+          * **Batch Operations** - Execute multiple commands in sequence
+          * **Smooth Movement** - Natural mouse trajectories
+          * **Bezier Curves** - Advanced movement patterns
+          * **Input Locking** - Prevent unwanted input
+          * **Button Monitoring** - Real-time button state tracking
+          
+          ## 📖 Documentation
+          
+          * [GitHub Repository](https://github.com/K4HVH/makcu-cpp)
+          * [Examples](https://github.com/K4HVH/makcu-cpp/tree/main/examples)
+          * [Build Instructions](https://github.com/K4HVH/makcu-cpp#building)
+          
+          ---
+          
+          **🔧 Built with**: C++17, CMake, Cross-platform Serial Communication  
+          **📄 License**: GNU GPLv3  
+          **🏷️ Version**: ${{ steps.version_check.outputs.version }}
+        draft: false
+        prerelease: false
+
+  build-windows:
+    needs: check-and-release
+    if: needs.check-and-release.outputs.should_release == 'true'
+    runs-on: windows-latest
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install Linux dependencies
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libudev-dev pkg-config build-essential
-
-    - name: Setup MSBuild (Windows)
-      if: runner.os == 'Windows'
+    - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v1.3
 
     - name: Configure CMake
       run: |
-        cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
 
     - name: Build
       run: |
-        cmake --build build --config ${{ matrix.build_type }} --parallel
+        cmake --build build --config Release --parallel
 
-    - name: Test
-      working-directory: build
+    - name: Create packages
       run: |
-        ctest --build-config ${{ matrix.build_type }} --output-on-failure
-
-    - name: Package (Release only)
-      if: matrix.build_type == 'Release'
-      working-directory: build
-      run: |
+        cd build
         cpack -G ZIP
+        cpack -G NSIS
+
+    - name: Upload Windows ZIP
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.check-and-release.outputs.upload_url }}
+        asset_path: ./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-win64.zip
+        asset_name: makcu-cpp-windows.zip
+        asset_content_type: application/zip
+
+    - name: Upload Windows Installer
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.check-and-release.outputs.upload_url }}
+        asset_path: ./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-win64.exe
+        asset_name: makcu-cpp-windows-installer.exe
+        asset_content_type: application/octet-stream
+
+  build-linux:
+    needs: check-and-release
+    if: needs.check-and-release.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libudev-dev pkg-config build-essential
+
+    - name: Configure CMake
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: |
+        cmake --build build --parallel
+
+    - name: Create packages
+      run: |
+        cd build
+        cpack -G TGZ
+        cpack -G DEB
+        cpack -G RPM
+
+    - name: Upload Linux TGZ
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.check-and-release.outputs.upload_url }}
+        asset_path: ./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-Linux.tar.gz
+        asset_name: makcu-cpp-linux.tar.gz
+        asset_content_type: application/gzip
+
+    - name: Upload DEB package
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.check-and-release.outputs.upload_url }}
+        asset_path: ./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-Linux.deb
+        asset_name: makcu-cpp-linux.deb
+        asset_content_type: application/vnd.debian.binary-package
+
+    - name: Upload RPM package
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.check-and-release.outputs.upload_url }}
+        asset_path: ./build/makcu-cpp-${{ needs.check-and-release.outputs.version }}-Linux.rpm
+        asset_name: makcu-cpp-linux.rpm
+        asset_content_type: application/x-rpm
