@@ -94,16 +94,24 @@ if errorlevel 1 (
 
 echo.
 echo [SUCCESS] === Build completed successfully! ===
-echo [INFO] Executable location: %CD%\bin\Release\makcu-cpp.exe
+echo [INFO] Library location: %CD%\lib\Release\
 
-REM Test if the executable was created
-if exist "bin\Release\makcu-cpp.exe" (
-    echo [SUCCESS] ✓ Executable built successfully
-) else (
-    echo [ERROR] ✗ Executable not found
-    exit /b 1
+REM Test if the library was created
+if exist "lib\Release\makcu-cpp.dll" (
+    echo [SUCCESS] ✓ Shared library built successfully
+    goto :success
 )
+if exist "lib\Release\makcu-cpp.lib" (
+    echo [SUCCESS] ✓ Static library built successfully
+    goto :success
+)
+echo [ERROR] ✗ Library not found
+exit /b 1
 
+:success
 echo.
-echo To run the demo:
-echo cd build ^&^& bin\Release\makcu-cpp.exe
+echo To build and run examples:
+echo cmake --build . --target install
+echo cd ..\examples ^&^& mkdir build ^&^& cd build
+echo cmake .. ^&^& cmake --build . --config Release
+echo bin\Release\basic_usage.exe  REM or bin\Release\demo.exe
