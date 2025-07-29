@@ -181,13 +181,45 @@ set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "High-Performance C++ Library for MAKCU Mouse Controllers")
 set(CPACK_PACKAGE_VENDOR "K4HVH")
 set(CPACK_PACKAGE_CONTACT "https://github.com/K4HVH/makcu-cpp")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/K4HVH/makcu-cpp")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
 
+# Platform-specific package configuration
 if(WIN32)
     set(CPACK_GENERATOR "ZIP;NSIS")
+    
+    # NSIS Configuration for versioned subfolder structure
+    set(CPACK_NSIS_DISPLAY_NAME "MAKCU C++ Library")
+    set(CPACK_NSIS_PACKAGE_NAME "MAKCU C++ Library")
+    set(CPACK_NSIS_CONTACT "https://github.com/K4HVH/makcu-cpp")
+    set(CPACK_NSIS_HELP_LINK "https://github.com/K4HVH/makcu-cpp")
+    set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/K4HVH/makcu-cpp")
+    set(CPACK_NSIS_MODIFY_PATH ON)
+    
+    # Key setting: Configure install directory structure
+    # This creates: C:\Program Files\makcu-cpp\1.1.0
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "makcu-cpp\\\\${PROJECT_VERSION}")
+    
+    # Optional: Set a more user-friendly program name in Add/Remove Programs
+    set(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\makcu-cpp.exe")
+    set(CPACK_NSIS_DISPLAY_NAME "MAKCU C++ Library ${PROJECT_VERSION}")
+    
+    # Create start menu shortcuts (optional)
+    set(CPACK_NSIS_MENU_LINKS
+        "https://github.com/K4HVH/makcu-cpp" "MAKCU C++ Library Homepage"
+    )
+    
+    # Allow users to choose installation directory
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    
 else()
     set(CPACK_GENERATOR "TGZ;DEB;RPM")
     set(CPACK_DEBIAN_PACKAGE_DEPENDS "libudev1")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "K4HVH")
+    set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/K4HVH/makcu-cpp")
     set(CPACK_RPM_PACKAGE_REQUIRES "systemd-devel")
+    set(CPACK_RPM_PACKAGE_URL "https://github.com/K4HVH/makcu-cpp")
 endif()
 
 include(CPack)
