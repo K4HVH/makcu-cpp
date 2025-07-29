@@ -112,28 +112,32 @@ jobs:
       id: create_release
       run: |
         # Decode changelog from base64
-        CHANGELOG=$(echo "${{ steps.changelog.outputs.changelog_b64 }}" | base64 -d)
+        echo "${{ steps.changelog.outputs.changelog_b64 }}" | base64 -d > changelog.md
         
-        # Create release body
+        # Create release body by concatenating parts
         cat > release_body.md << 'RELEASE_EOF'
+High-performance C++ library for MAKCU mouse controllers.
+
+RELEASE_EOF
         
-        CHANGELOG_PLACEHOLDER
+        # Add changelog
+        cat changelog.md >> release_body.md
         
-        ## Downloads
-        * Windows: `makcu-cpp-windows.zip`, `makcu-cpp-windows-installer.exe`
-        * Linux: `makcu-cpp-linux.tar.gz`, `makcu-cpp-linux.deb`, `makcu-cpp-linux.rpm`
-        
-        ## Quick Start
-        ```cpp
-        #include <makcu.h>
-        makcu::Device device;
-        device.connect();
-        device.mouseMove(100, 0);
-        ```
-        RELEASE_EOF
-        
-        # Replace placeholder with actual changelog
-        sed -i "s|CHANGELOG_PLACEHOLDER|$(echo "$CHANGELOG" | sed 's/|/\\|/g/')|g/" release_body.md
+        # Add the rest
+        cat >> release_body.md << 'RELEASE_EOF'
+
+## Downloads
+* Windows: `makcu-cpp-windows.zip`, `makcu-cpp-windows-installer.exe`
+* Linux: `makcu-cpp-linux.tar.gz`, `makcu-cpp-linux.deb`, `makcu-cpp-linux.rpm`
+
+## Quick Start
+```cpp
+#include <makcu.h>
+makcu::Device device;
+device.connect();
+device.mouseMove(100, 0);
+```
+RELEASE_EOF
         
         # Create the release
         gh release create "${{ steps.version_check.outputs.tag }}" \
