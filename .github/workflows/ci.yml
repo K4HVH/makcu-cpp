@@ -3,13 +3,14 @@ name: Auto Release
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch:  # Manual trigger option
+  workflow_dispatch:
 
 jobs:
   check-and-release:
     runs-on: ubuntu-latest
     outputs:
       should_release: ${{ steps.version_check.outputs.should_release }}
+      is_update: ${{ steps.version_check.outputs.is_update }}
       version: ${{ steps.version_check.outputs.version }}
       tag: ${{ steps.version_check.outputs.tag }}
       upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -19,85 +20,60 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Check if version changed
+    - name: Check version and release status
       id: version_check
       run: |
         # Extract current version from CMakeLists.txt
         CURRENT_VERSION=$(grep -oP 'project\(makcu-cpp VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
         echo "Current version in CMakeLists.txt: $CURRENT_VERSION"
         
-        # Get latest release tag
-        LATEST_TAG=$(git tag -l "v*" | sort -V | tail -n1)
-        if [ -z "$LATEST_TAG" ]; then
-          LATEST_VERSION="0.0.0"
-          echo "No previous releases found"
+        TAG="v$CURRENT_VERSION"
+        
+        # Check if tag already exists
+        if git rev-parse "$TAG" >/dev/null 2>&1; then
+          echo "Tag $TAG already exists, checking for new commits"
+          
+          # Get commits since this tag
+          NEW_COMMITS=$(git rev-list ${TAG}..HEAD --count)
+          if [ "$NEW_COMMITS" -gt 0 ]; then
+            echo "Found $NEW_COMMITS new commits since $TAG, will update release"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "is_update=true" >> $GITHUB_OUTPUT
+          else
+            echo "No new commits since $TAG"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
         else
-          LATEST_VERSION=${LATEST_TAG#v}
-          echo "Latest release version: $LATEST_VERSION"
+          echo "Tag $TAG does not exist, will create new release"
+          echo "should_release=true" >> $GITHUB_OUTPUT
+          echo "is_update=false" >> $GITHUB_OUTPUT
         fi
         
-        # Compare versions
-        if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
-          echo "Version changed from $LATEST_VERSION to $CURRENT_VERSION"
-          echo "should_release=true" >> $GITHUB_OUTPUT
-          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "tag=v$CURRENT_VERSION" >> $GITHUB_OUTPUT
-        else
-          echo "Version unchanged, no release needed"
-          echo "should_release=false" >> $GITHUB_OUTPUT
-        fi
+        echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
 
     - name: Generate changelog
       if: steps.version_check.outputs.should_release == 'true'
       id: changelog
       run: |
-        # Find previous tag for changelog
-        PREVIOUS_TAG=$(git tag -l "v*" | sort -V | tail -n2 | head -n1)
+        TAG="${{ steps.version_check.outputs.tag }}"
+        IS_UPDATE="${{ steps.version_check.outputs.is_update }}"
         
-        if [ -z "$PREVIOUS_TAG" ]; then
-          echo "## 🎉 Initial Release" > CHANGELOG.md
-          echo "" >> CHANGELOG.md
-          echo "This is the first release of the MAKCU C++ Library!" >> CHANGELOG.md
-          echo "" >> CHANGELOG.md
-          echo "### Features" >> CHANGELOG.md
-          echo "* High-performance mouse control with sub-millisecond response times" >> CHANGELOG.md
-          echo "* Cross-platform support (Windows & Linux)" >> CHANGELOG.md
-          echo "* Comprehensive API for mouse movement, clicking, and dragging" >> CHANGELOG.md
-          echo "* Advanced features like smooth movement and Bezier curves" >> CHANGELOG.md
-          echo "* Button monitoring and input locking capabilities" >> CHANGELOG.md
+        if [ "$IS_UPDATE" = "true" ]; then
+          # Update existing release - get commits since the tag
+          echo "## Changes" > CHANGELOG.md
+          git log --pretty=format:"* %s" ${TAG}..HEAD >> CHANGELOG.md
         else
-          echo "## 🚀 Changes since $PREVIOUS_TAG" > CHANGELOG.md
-          echo "" >> CHANGELOG.md
+          # New release - get all commits since previous version tag
+          PREVIOUS_TAG=$(git tag -l "v*" | grep -v "^$TAG$" | sort -V | tail -n1)
           
-          # Group commits by type
-          git log --pretty=format:"%s" $PREVIOUS_TAG..HEAD | while read -r commit; do
-            if [[ $commit =~ ^(feat|feature).*: ]]; then
-              echo "### ✨ Features" >> FEATURES.md
-              echo "* ${commit#*: }" >> FEATURES.md
-            elif [[ $commit =~ ^(fix|bugfix).*: ]]; then
-              echo "### 🐛 Bug Fixes" >> FIXES.md  
-              echo "* ${commit#*: }" >> FIXES.md
-            elif [[ $commit =~ ^(perf|performance).*: ]]; then
-              echo "### ⚡ Performance" >> PERF.md
-              echo "* ${commit#*: }" >> PERF.md
-            elif [[ $commit =~ ^(docs|doc).*: ]]; then
-              echo "### 📚 Documentation" >> DOCS.md
-              echo "* ${commit#*: }" >> DOCS.md
-            else
-              echo "### 🔧 Other Changes" >> OTHER.md
-              echo "* $commit" >> OTHER.md
-            fi
-          done
-          
-          # Combine all sections
-          [ -f FEATURES.md ] && cat FEATURES.md >> CHANGELOG.md && echo "" >> CHANGELOG.md
-          [ -f FIXES.md ] && cat FIXES.md >> CHANGELOG.md && echo "" >> CHANGELOG.md  
-          [ -f PERF.md ] && cat PERF.md >> CHANGELOG.md && echo "" >> CHANGELOG.md
-          [ -f DOCS.md ] && cat DOCS.md >> CHANGELOG.md && echo "" >> CHANGELOG.md
-          [ -f OTHER.md ] && cat OTHER.md >> CHANGELOG.md && echo "" >> CHANGELOG.md
-          
-          # Cleanup temp files
-          rm -f FEATURES.md FIXES.md PERF.md DOCS.md OTHER.md
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "## Changes" > CHANGELOG.md
+            echo "* Initial release" >> CHANGELOG.md
+          else
+            echo "## Changes" > CHANGELOG.md
+            git log --pretty=format:"* %s" ${PREVIOUS_TAG}..HEAD >> CHANGELOG.md
+          fi
         fi
         
         # Read changelog into output
@@ -107,13 +83,32 @@ jobs:
           echo EOF
         } >> $GITHUB_OUTPUT
 
-    - name: Create git tag
+    - name: Create or update git tag
       if: steps.version_check.outputs.should_release == 'true'
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git tag -a "${{ steps.version_check.outputs.tag }}" -m "Release ${{ steps.version_check.outputs.tag }}"
-        git push origin "${{ steps.version_check.outputs.tag }}"
+        
+        TAG="${{ steps.version_check.outputs.tag }}"
+        IS_UPDATE="${{ steps.version_check.outputs.is_update }}"
+        
+        if [ "$IS_UPDATE" = "true" ]; then
+          # Delete and recreate tag to point to latest commit
+          git tag -d "$TAG" || true
+          git push origin ":refs/tags/$TAG" || true
+        fi
+        
+        git tag -a "$TAG" -m "Release $TAG"
+        git push origin "$TAG"
+
+    - name: Delete existing release if updating
+      if: steps.version_check.outputs.should_release == 'true' && steps.version_check.outputs.is_update == 'true'
+      run: |
+        TAG="${{ steps.version_check.outputs.tag }}"
+        # Delete existing release
+        gh release delete "$TAG" --yes || true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Create Release
       if: steps.version_check.outputs.should_release == 'true'
@@ -123,79 +118,23 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.version_check.outputs.tag }}
-        release_name: MAKCU C++ Library ${{ steps.version_check.outputs.tag }}
+        release_name: MAKCU C++ ${{ steps.version_check.outputs.tag }}
         body: |
-          # 🎯 MAKCU C++ Library ${{ steps.version_check.outputs.tag }}
-          
-          High-performance C++ library for MAKCU mouse controllers with **sub-millisecond response times**.
+          High-performance C++ library for MAKCU mouse controllers.
           
           ${{ steps.changelog.outputs.CHANGELOG }}
           
-          ## 📦 Downloads
+          **Downloads:**
+          * Windows: `makcu-cpp-windows.zip`, `makcu-cpp-windows-installer.exe`
+          * Linux: `makcu-cpp-linux.tar.gz`, `makcu-cpp-linux.deb`, `makcu-cpp-linux.rpm`
           
-          | Platform | Package Type | Download |
-          |----------|--------------|----------|
-          | 🪟 **Windows** | ZIP Archive | `makcu-cpp-windows.zip` |
-          | 🪟 **Windows** | Installer | `makcu-cpp-windows-installer.exe` |
-          | 🐧 **Linux** | TAR.GZ | `makcu-cpp-linux.tar.gz` |
-          | 🐧 **Linux** | DEB Package | `makcu-cpp-linux.deb` |
-          | 🐧 **Linux** | RPM Package | `makcu-cpp-linux.rpm` |
-          
-          ## ⚡ Performance Metrics
-          
-          * **Mouse Movement**: ~0.07ms average response time
-          * **Button Click**: ~0.16ms average response time  
-          * **28x faster** than Python implementation
-          * **4000000 baud** high-speed serial communication
-          
-          ## 🚀 Quick Start
-          
-          ### Windows
+          **Quick Start:**
           ```cpp
           #include <makcu.h>
-          
           makcu::Device device;
           device.connect();
-          device.enableHighPerformanceMode(true);
           device.mouseMove(100, 0);
-          device.click(makcu::MouseButton::LEFT);
           ```
-          
-          ### Linux Installation
-          ```bash
-          # DEB package
-          sudo dpkg -i makcu-cpp-linux.deb
-          
-          # Or TAR.GZ
-          tar -xzf makcu-cpp-linux.tar.gz
-          sudo make install
-          ```
-          
-          ### CMake Integration
-          ```cmake
-          find_package(makcu-cpp REQUIRED)
-          target_link_libraries(your_app PRIVATE makcu::makcu-cpp)
-          ```
-          
-          ## 🎮 Gaming Features
-          
-          * **Batch Operations** - Execute multiple commands in sequence
-          * **Smooth Movement** - Natural mouse trajectories
-          * **Bezier Curves** - Advanced movement patterns
-          * **Input Locking** - Prevent unwanted input
-          * **Button Monitoring** - Real-time button state tracking
-          
-          ## 📖 Documentation
-          
-          * [GitHub Repository](https://github.com/K4HVH/makcu-cpp)
-          * [Examples](https://github.com/K4HVH/makcu-cpp/tree/main/examples)
-          * [Build Instructions](https://github.com/K4HVH/makcu-cpp#building)
-          
-          ---
-          
-          **🔧 Built with**: C++17, CMake, Cross-platform Serial Communication  
-          **📄 License**: GNU GPLv3  
-          **🏷️ Version**: ${{ steps.version_check.outputs.version }}
         draft: false
         prerelease: false
 
