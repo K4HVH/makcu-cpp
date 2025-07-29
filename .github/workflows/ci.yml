@@ -89,7 +89,6 @@ jobs:
             print "  " $0
           }
         }
-        in_commit && NF == 0 { print "  " }
         ' commits.tmp >> CHANGELOG.md
         
         # Clean up
