@@ -35,10 +35,8 @@ jobs:
           
           # Get commits since this tag
           NEW_COMMITS=$(git rev-list ${TAG}..HEAD --count)
-          echo "Found $NEW_COMMITS new commits since $TAG"
-          
           if [ "$NEW_COMMITS" -gt 0 ]; then
-            echo "Will update release with new commits"
+            echo "Found $NEW_COMMITS new commits since $TAG, will update release"
             echo "should_release=true" >> $GITHUB_OUTPUT
             echo "is_update=true" >> $GITHUB_OUTPUT
           else
@@ -61,36 +59,26 @@ jobs:
         TAG="${{ steps.version_check.outputs.tag }}"
         IS_UPDATE="${{ steps.version_check.outputs.is_update }}"
         
-        echo "Generating changelog for tag: $TAG"
-        echo "Is update: $IS_UPDATE"
-        
         if [ "$IS_UPDATE" = "true" ]; then
           # Update existing release - get commits since the tag
-          echo "Getting commits since existing tag $TAG"
-          git log --oneline ${TAG}..HEAD
-          git log --pretty=format:"* %s" ${TAG}..HEAD > changes.txt
+          echo "## Changes" > CHANGELOG.md
+          git log --pretty=format:"* %s" ${TAG}..HEAD >> CHANGELOG.md
         else
           # New release - get all commits since previous version tag
           PREVIOUS_TAG=$(git tag -l "v*" | grep -v "^$TAG$" | sort -V | tail -n1)
-          echo "Previous tag: $PREVIOUS_TAG"
           
           if [ -z "$PREVIOUS_TAG" ]; then
-            echo "No previous tag found, this is initial release"
-            echo "* Initial release" > changes.txt
+            echo "## Changes" > CHANGELOG.md
+            echo "* Initial release" >> CHANGELOG.md
           else
-            echo "Getting commits from $PREVIOUS_TAG to HEAD"
-            git log --oneline ${PREVIOUS_TAG}..HEAD
-            git log --pretty=format:"* %s" ${PREVIOUS_TAG}..HEAD > changes.txt
+            echo "## Changes" > CHANGELOG.md
+            git log --pretty=format:"* %s" ${PREVIOUS_TAG}..HEAD >> CHANGELOG.md
           fi
         fi
         
-        echo "Generated changelog:"
-        cat changes.txt
-        
-        # Use environment file approach (more reliable)
-        echo "CHANGELOG<<EOF" >> $GITHUB_ENV
-        cat changes.txt >> $GITHUB_ENV
-        echo "EOF" >> $GITHUB_ENV
+        # Encode changelog to base64 to avoid delimiter issues
+        CHANGELOG_B64=$(base64 -w 0 CHANGELOG.md)
+        echo "changelog_b64=$CHANGELOG_B64" >> $GITHUB_OUTPUT
 
     - name: Create or update git tag
       if: steps.version_check.outputs.should_release == 'true'
@@ -122,29 +110,41 @@ jobs:
     - name: Create Release
       if: steps.version_check.outputs.should_release == 'true'
       id: create_release
-      uses: actions/create-release@v1
+      run: |
+        # Decode changelog from base64
+        CHANGELOG=$(echo "${{ steps.changelog.outputs.changelog_b64 }}" | base64 -d)
+        
+        # Create release body
+        cat > release_body.md << 'RELEASE_EOF'
+        
+        CHANGELOG_PLACEHOLDER
+        
+        ## Downloads
+        * Windows: `makcu-cpp-windows.zip`, `makcu-cpp-windows-installer.exe`
+        * Linux: `makcu-cpp-linux.tar.gz`, `makcu-cpp-linux.deb`, `makcu-cpp-linux.rpm`
+        
+        ## Quick Start
+        ```cpp
+        #include <makcu.h>
+        makcu::Device device;
+        device.connect();
+        device.mouseMove(100, 0);
+        ```
+        RELEASE_EOF
+        
+        # Replace placeholder with actual changelog
+        sed -i "s|CHANGELOG_PLACEHOLDER|$(echo "$CHANGELOG" | sed 's/|/\\|/g')|g" release_body.md
+        
+        # Create the release
+        gh release create "${{ steps.version_check.outputs.tag }}" \
+          --title "MAKCU C++ ${{ steps.version_check.outputs.tag }}" \
+          --notes-file release_body.md
+        
+        # Get upload URL for artifacts
+        UPLOAD_URL=$(gh api repos/${{ github.repository }}/releases/tags/${{ steps.version_check.outputs.tag }} --jq '.upload_url')
+        echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.version_check.outputs.tag }}
-        release_name: MAKCU C++ ${{ steps.version_check.outputs.tag }}
-        body: |
-          ## Changes
-          ${{ env.CHANGELOG }}
-          
-          ## Downloads
-          * Windows: `makcu-cpp-windows.zip`, `makcu-cpp-windows-installer.exe`
-          * Linux: `makcu-cpp-linux.tar.gz`, `makcu-cpp-linux.deb`, `makcu-cpp-linux.rpm`
-          
-          ## Quick Start
-          ```cpp
-          #include <makcu.h>
-          makcu::Device device;
-          device.connect();
-          device.mouseMove(100, 0);
-          ```
-        draft: false
-        prerelease: false
 
   build-windows:
     needs: check-and-release
