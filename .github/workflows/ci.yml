@@ -61,24 +61,21 @@ jobs:
         
         if [ "$IS_UPDATE" = "true" ]; then
           # Update existing release - get commits since the tag
-          git log --pretty=format:"* %s" ${TAG}..HEAD > changelog.txt
+          git log --pretty=format:"* %s" ${TAG}..HEAD > changes.txt
         else
           # New release - get all commits since previous version tag
           PREVIOUS_TAG=$(git tag -l "v*" | grep -v "^$TAG$" | sort -V | tail -n1)
           
           if [ -z "$PREVIOUS_TAG" ]; then
-            echo "* Initial release" > changelog.txt
+            echo "* Initial release" > changes.txt
           else
-            git log --pretty=format:"* %s" ${PREVIOUS_TAG}..HEAD > changelog.txt
+            git log --pretty=format:"* %s" ${PREVIOUS_TAG}..HEAD > changes.txt
           fi
         fi
         
-        # Set output using proper multiline format
-        {
-          echo 'changelog<<EOF'
-          cat changelog.txt
-          echo EOF
-        } >> $GITHUB_OUTPUT
+        # Convert to single line with proper escaping for GitHub Actions
+        CHANGELOG=$(cat changes.txt | sed ':a;N;$!ba;s/\n/%0A/g')
+        echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
 
     - name: Create or update git tag
       if: steps.version_check.outputs.should_release == 'true'
