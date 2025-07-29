@@ -18,13 +18,54 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Check for Visual Studio or Build Tools
+REM Check for Visual Studio or Build Tools and set up environment
 where cl >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] MSVC compiler not found
-    echo Please install Visual Studio or Visual Studio Build Tools
-    echo Run this script from a Visual Studio Developer Command Prompt
-    exit /b 1
+    echo MSVC compiler not in PATH, attempting to locate Visual Studio...
+    
+    REM Try to find vswhere.exe (comes with VS 2017+)
+    set "vswhere=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+    if not exist "!vswhere!" (
+        set "vswhere=%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe"
+    )
+    
+    if exist "!vswhere!" (
+        REM Find the latest Visual Studio installation
+        for /f "usebackq tokens=*" %%i in (`"!vswhere!" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+            set "vsinstall=%%i"
+        )
+        
+        if defined vsinstall (
+            echo Found Visual Studio at: !vsinstall!
+            REM Set up the environment using vcvarsall.bat
+            if exist "!vsinstall!\VC\Auxiliary\Build\vcvarsall.bat" (
+                echo Setting up Visual Studio environment...
+                call "!vsinstall!\VC\Auxiliary\Build\vcvarsall.bat" x64
+                if errorlevel 1 (
+                    echo [ERROR] Failed to set up Visual Studio environment
+                    exit /b 1
+                )
+            ) else (
+                echo [ERROR] vcvarsall.bat not found in Visual Studio installation
+                exit /b 1
+            )
+        ) else (
+            echo [ERROR] Visual Studio with C++ tools not found
+            echo Please install Visual Studio with C++ development tools
+            exit /b 1
+        )
+    ) else (
+        echo [ERROR] vswhere.exe not found - Visual Studio 2017 or later required
+        echo Please install Visual Studio 2017 or later with C++ development tools
+        exit /b 1
+    )
+    
+    REM Verify compiler is now available
+    where cl >nul 2>&1
+    if errorlevel 1 (
+        echo [ERROR] MSVC compiler still not found after environment setup
+        exit /b 1
+    )
 )
 
 echo [SUCCESS] All dependencies found!
