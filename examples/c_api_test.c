@@ -1,8 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <makcu/makcu_c.h>
+#ifdef _WIN32
+    #include <windows.h>
+    #define sleep(x) Sleep((x) * 1000)
+    #define usleep(x) Sleep((x) / 1000)
+#else
+    #include <unistd.h>
+#endif
+#include <makcu_c.h>
 
 void mouse_button_callback(makcu_mouse_button_t button, bool pressed, void* user_data) {
     const char* button_name = makcu_mouse_button_to_string(button);

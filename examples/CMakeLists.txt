@@ -1,8 +1,29 @@
 cmake_minimum_required(VERSION 3.15)
 project(makcu-examples)
 
-# Find the makcu-cpp library
-find_package(makcu-cpp REQUIRED)
+# Try to find makcu-cpp package first (if installed)
+find_package(makcu-cpp QUIET)
+
+if(NOT makcu-cpp_FOUND)
+    # If not found, look for local build in parent directory
+    message(STATUS "makcu-cpp package not found, looking for local build...")
+    
+    # Check if parent build exists
+    get_filename_component(PARENT_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../build" ABSOLUTE)
+    if(EXISTS "${PARENT_BUILD_DIR}/makcu-cppConfig.cmake")
+        message(STATUS "Found local build at: ${PARENT_BUILD_DIR}")
+        set(makcu-cpp_DIR "${PARENT_BUILD_DIR}")
+        find_package(makcu-cpp REQUIRED)
+    else()
+        message(FATAL_ERROR 
+            "makcu-cpp library not found!\n"
+            "Please either:\n"
+            "1. Build and install the library: cd .. && mkdir build && cd build && cmake .. && cmake --build . --config Release && cmake --build . --target install\n"
+            "2. Or build the library locally: cd .. && mkdir build && cd build && cmake .. && cmake --build . --config Release\n"
+            "Then try building the examples again."
+        )
+    endif()
+endif()
 
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
