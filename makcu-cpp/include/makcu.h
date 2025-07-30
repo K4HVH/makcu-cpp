@@ -196,7 +196,18 @@ namespace makcu {
 
 
         // Device control
-        bool setBaudRate(uint32_t baudRate);
+        /**
+         * @brief Changes the MAKCU device baud rate using the proper protocol
+         * 
+         * Sends the MAKCU-specific baud rate change command and reconnects at the new rate.
+         * Valid range: 115200 - 4000000 bps. Note: This change is NOT permanent and will
+         * reset to 115200 when the MAKCU device is power cycled.
+         * 
+         * @param baudRate Target baud rate (will be clamped to valid range)
+         * @param validateCommunication Whether to test communication after baud rate change (default: true)
+         * @return true if baud rate was successfully changed and verified, false otherwise
+         */
+        bool setBaudRate(uint32_t baudRate, bool validateCommunication = true);
 
         // Callbacks
         void setMouseButtonCallback(MouseButtonCallback callback);
