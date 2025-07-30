@@ -11,12 +11,22 @@ extern "C" {
 // Export macros for C API
 #ifdef _WIN32
     #ifdef MAKCU_EXPORTS
+        // Building shared library - export symbols
         #define MAKCU_C_API __declspec(dllexport)
-    #else
+    #elif defined(MAKCU_SHARED)
+        // Using shared library - import symbols
         #define MAKCU_C_API __declspec(dllimport)
+    #else
+        // Using static library - no decoration needed
+        #define MAKCU_C_API
     #endif
 #else
-    #define MAKCU_C_API __attribute__((visibility("default")))
+    // Non-Windows platforms
+    #ifdef __GNUC__
+        #define MAKCU_C_API __attribute__((visibility("default")))
+    #else
+        #define MAKCU_C_API
+    #endif
 #endif
 
 // Forward declarations - opaque types
