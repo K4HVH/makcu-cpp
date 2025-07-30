@@ -86,3 +86,8 @@ sudo usermod -a -G dialout $USER
 ## License
 
 GNU GPLv3
+
+## Acknowledgements
+
+- [Makcu Discord Server](https://discord.gg/frvh3P4Qeg) community
+- [Makcu Python Library](https://github.com/SleepyTotem/makcu-py-lib) by [SleepyTotem](https://github.com/SleepyTotem)
