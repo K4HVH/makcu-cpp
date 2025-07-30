@@ -69,19 +69,9 @@ cd examples && ./build.sh  # Build examples
 
 ## Performance
 
-### C++ API (Direct)
-
 - Mouse Movement: ~0.04ms (40μs)
 - Button Click: ~0.04ms (40μs)
 - 28x faster than Python implementation
-
-### C API (Multi-language)
-
-- Mouse Movement: ~0.15ms (150μs)
-- Button Click: ~0.15ms (150μs)
-- Includes safety overhead for cross-language compatibility
-
-**Note:** The C API has ~100μs overhead per operation due to parameter validation, exception handling, and ABI safety measures. This is expected and ensures reliable operation across different programming languages.
 
 ## Troubleshooting
 
