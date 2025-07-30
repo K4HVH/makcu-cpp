@@ -21,11 +21,6 @@ namespace makcu {
     constexpr uint32_t INITIAL_BAUD_RATE = 115200;
     constexpr uint32_t HIGH_SPEED_BAUD_RATE = 4000000;
 
-    // Baud rate change command
-    const std::vector<uint8_t> BAUD_CHANGE_COMMAND = {
-        0xDE, 0xAD, 0x05, 0x00, 0xA5, 0x00, 0x09, 0x3D, 0x00
-    };
-
     // Static member definitions for PerformanceProfiler
     std::atomic<bool> PerformanceProfiler::s_enabled{ false };
     std::mutex PerformanceProfiler::s_mutex;
@@ -172,13 +167,26 @@ namespace makcu {
 
         ~Impl() = default;
 
-        bool switchToHighSpeedMode() {
+        // Private static method for the core baud rate change protocol
+        static bool performBaudRateChange(SerialPort* serialPort, uint32_t baudRate) {
             if (!serialPort->isOpen()) {
                 return false;
             }
 
-            // Send baud rate change command
-            if (!serialPort->write(BAUD_CHANGE_COMMAND)) {
+            // Create MAKCU baud rate change command
+            // Protocol: 0xDE 0xAD [size_u16] 0xA5 [baud_u32]
+            std::vector<uint8_t> baudChangeCommand = {
+                0xDE, 0xAD,                                    // Standard header
+                0x05, 0x00,                                    // Size (5 bytes: command + 4-byte baud rate)
+                0xA5,                                          // Baud rate change command
+                static_cast<uint8_t>(baudRate & 0xFF),         // Baud rate bytes (little-endian)
+                static_cast<uint8_t>((baudRate >> 8) & 0xFF),
+                static_cast<uint8_t>((baudRate >> 16) & 0xFF),
+                static_cast<uint8_t>((baudRate >> 24) & 0xFF)
+            };
+
+            // Send the baud rate change command
+            if (!serialPort->write(baudChangeCommand)) {
                 return false;
             }
 
@@ -186,13 +194,13 @@ namespace makcu {
                 return false;
             }
 
-            // Close and reopen at high speed
+            // Close and reopen at new baud rate
             std::string portName = serialPort->getPortName();
             serialPort->close();
 
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-            if (!serialPort->open(portName, HIGH_SPEED_BAUD_RATE)) {
+            if (!serialPort->open(portName, baudRate)) {
                 return false;
             }
 
@@ -521,7 +529,7 @@ namespace makcu {
         }
 
         // Switch to high-speed mode
-        if (!m_impl->switchToHighSpeedMode()) {
+        if (!Impl::performBaudRateChange(m_impl->serialPort.get(), HIGH_SPEED_BAUD_RATE)) {
             m_impl->serialPort->close();
             m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
@@ -1122,12 +1130,45 @@ namespace makcu {
 
 
 
-    bool Device::setBaudRate(uint32_t baudRate) {
+    bool Device::setBaudRate(uint32_t baudRate, bool validateCommunication) {
         if (!m_impl->connected.load()) {
             return false;
         }
 
-        return m_impl->serialPort->setBaudRate(baudRate);
+        // Clamp baud rate to valid range as per MAKCU protocol
+        if (baudRate < 115200) {
+            baudRate = 115200;
+        } else if (baudRate > 4000000) {
+            baudRate = 4000000;
+        }
+
+        // Use the static helper method for the core baud rate change
+        if (!Impl::performBaudRateChange(m_impl->serialPort.get(), baudRate)) {
+            return false;
+        }
+
+        // If validation is requested (for manual setBaudRate calls), test communication
+        if (validateCommunication) {
+            try {
+                auto future = m_impl->serialPort->sendTrackedCommand("km.version()", true, std::chrono::milliseconds(1000));
+                auto response = future.get();
+                
+                // Check if we got a valid response containing "km.MAKCU"
+                if (response.find("km.MAKCU") != std::string::npos) {
+                    return true;
+                } else {
+                    // Communication test failed, reconnect at 115200 baud rate
+                    setBaudRate(115200, false);  // Recursive call without validation to avoid infinite loop
+                    return false;
+                }
+            } catch (...) {
+                // Exception occurred, reconnect at 115200 baud rate
+                setBaudRate(115200, false);  // Recursive call without validation to avoid infinite loop
+                return false;
+            }
+        }
+
+        return true;
     }
 
     void Device::setMouseButtonCallback(MouseButtonCallback callback) {

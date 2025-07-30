@@ -24,7 +24,11 @@ target_link_libraries(demo PRIVATE makcu::makcu-cpp)
 add_executable(c_api_test c_api_test.c)
 target_link_libraries(c_api_test PRIVATE makcu::makcu-cpp)
 
+# Baud rate change test
+add_executable(baud_rate_test baud_rate_test.cpp)
+target_link_libraries(baud_rate_test PRIVATE makcu::makcu-cpp)
+
 # Set output directory
-set_target_properties(basic_usage demo c_api_test PROPERTIES
+set_target_properties(basic_usage demo c_api_test baud_rate_test PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
