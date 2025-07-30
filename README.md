@@ -1,10 +1,11 @@
 # MAKCU C++ Library
 
-High-performance C++ library for MAKCU mouse controllers. Sub-millisecond response times, cross-platform support.
+High-performance C++ library for MAKCU mouse controllers. Sub-millisecond response times, cross-platform support with C ABI for multi-language integration.
 
 ## Prerequisites
 
-- C++17 compiler
+- C++17 compiler (for C++ API)
+- C99 compiler (for C API only)
 - CMake 3.15+
 - MAKCU Device (VID:PID = 1A86:55D3)
 - Linux: `libudev-dev`, `pkg-config`
@@ -23,6 +24,8 @@ sudo make install  # Install system-wide
 
 ## Integration
 
+### C++ API
+
 Add to your CMakeLists.txt:
 
 ```cmake
@@ -30,15 +33,29 @@ find_package(makcu-cpp REQUIRED)
 target_link_libraries(your_app PRIVATE makcu::makcu-cpp)
 ```
 
-Basic usage:
+Basic C++ usage:
 
 ```cpp
-#include <makcu.h>
+#include <makcu/makcu.h>
 
 makcu::Device device;
 device.connect();
 device.mouseMove(100, 0);
 device.click(makcu::MouseButton::LEFT);
+```
+
+### C API (for other languages)
+
+The library includes a complete C ABI for easy integration with Python, Rust, Go, C#, and other languages:
+
+```c
+#include <makcu/makcu_c.h>
+
+makcu_device_t* device = makcu_device_create();
+makcu_connect(device, "");
+makcu_mouse_move(device, 100, 0);
+makcu_mouse_click(device, MAKCU_MOUSE_LEFT);
+makcu_device_destroy(device);
 ```
 
 See `examples/` for complete integration examples.
@@ -52,9 +69,19 @@ cd examples && ./build.sh  # Build examples
 
 ## Performance
 
-- Mouse Movement: 0.07ms
-- Button Click: 0.16ms
+### C++ API (Direct)
+
+- Mouse Movement: ~0.04ms (40μs)
+- Button Click: ~0.04ms (40μs)
 - 28x faster than Python implementation
+
+### C API (Multi-language)
+
+- Mouse Movement: ~0.15ms (150μs)
+- Button Click: ~0.15ms (150μs)
+- Includes safety overhead for cross-language compatibility
+
+**Note:** The C API has ~100μs overhead per operation due to parameter validation, exception handling, and ABI safety measures. This is expected and ensures reliable operation across different programming languages.
 
 ## Troubleshooting
 

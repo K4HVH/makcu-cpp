@@ -20,6 +20,7 @@ if [ -f "bin/basic_usage" ] && [ -f "bin/demo" ]; then
     echo "To run the examples:"
     echo "  ./build/bin/basic_usage    # Simple usage example"
     echo "  ./build/bin/demo           # Full demo with all features"
+    echo "  ./build/bin/c_api_test     # C API test"
     echo
     echo "To use this in your own project:"
     echo "1. Install the MAKCU library: cd .. && mkdir build && cd build && cmake .. && make && sudo make install"

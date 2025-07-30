@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(makcu-cpp VERSION 1.2.0 LANGUAGES CXX)
+project(makcu-cpp VERSION 1.3.0 LANGUAGES CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -33,6 +33,7 @@ endif()
 set(LIBRARY_SOURCES
     makcu-cpp/src/makcu.cpp
     makcu-cpp/src/serialport.cpp
+    makcu-cpp/src/makcu_c.cpp
 )
 
 # Headers
@@ -40,6 +41,7 @@ set(HEADERS
     makcu-cpp/include/makcu.h
     makcu-cpp/include/serialport.h
     makcu-cpp/include/makcu_export.h
+    makcu-cpp/include/makcu_c.h
 )
 
 # Create both shared and static libraries by default

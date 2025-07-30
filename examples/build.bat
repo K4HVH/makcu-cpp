@@ -76,6 +76,7 @@ if exist "bin\Release\basic_usage.exe" (
         echo To run the examples:
         echo   build\bin\Release\basic_usage.exe    # Simple usage example
         echo   build\bin\Release\demo.exe           # Full demo with all features
+        echo   build\bin\Release\c_api_test.exe     # C API test
         echo.
         echo To use this in your own project:
         echo 1. Install the MAKCU library: cd .. ^&^& mkdir build ^&^& cd build ^&^& cmake .. ^&^& cmake --build . --config Release ^&^& cmake --build . --target install
