@@ -1,0 +1,2438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAKCU C++ Library - API Reference</title>
+    <style>
+        :root {
+            --primary-color: #3b82f6;
+            --secondary-color: #1e293b;
+            --background-color: #0f172a;
+            --surface-color: #1e293b;
+            --text-color: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+            --hover-color: #2563eb;
+            --code-bg: #0f172a;
+            --header-bg: #1e40af;
+            --accent-color: #06b6d4;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--background-color);
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--header-bg), var(--primary-color));
+            color: white;
+            padding: 2rem 0;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+
+        .search-container {
+            background: var(--surface-color);
+            padding: 1.5rem 0;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        #searchInput {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+            background: var(--background-color);
+            color: var(--text-color);
+            transition: border-color 0.2s;
+        }
+
+        #searchInput:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .search-filters {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .filter-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border-color);
+            background: var(--surface-color);
+            color: var(--text-color);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .filter-btn.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .filter-btn:hover {
+            background: var(--hover-color);
+            color: white;
+        }
+
+        .main-content {
+            padding: 2rem 0;
+        }
+
+        .api-section {
+            margin-bottom: 3rem;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .section-title {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .section-count {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .function-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--surface-color);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            margin-bottom: 2rem;
+        }
+
+        .function-table th {
+            background: var(--secondary-color);
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-color);
+        }
+
+        .function-table td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        .function-table tr:hover {
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .function-name {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-weight: 600;
+            color: var(--accent-color);
+            font-size: 0.9rem;
+        }
+
+        .function-signature {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.85rem;
+            background: var(--code-bg);
+            padding: 0.5rem;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            line-height: 1.4;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+        }
+
+        .function-description {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: var(--text-color);
+        }
+
+        .api-type {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .api-type.cpp {
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .api-type.c {
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .api-type.native {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .api-type.software {
+            background: rgba(139, 92, 246, 0.2);
+            color: #a78bfa;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+
+        .parameters {
+            margin-top: 1rem;
+        }
+
+        .parameters-title {
+            font-weight: 600;
+            color: var(--warning-color);
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .parameter {
+            margin: 0.25rem 0;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .param-name {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-weight: 600;
+            color: #a78bfa;
+        }
+
+        .param-type {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            color: var(--success-color);
+            font-size: 0.8rem;
+        }
+
+        .return-info {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            background: rgba(16, 185, 129, 0.1);
+            border-left: 3px solid var(--success-color);
+            border-radius: 0 4px 4px 0;
+        }
+
+        .return-title {
+            font-weight: 600;
+            color: var(--success-color);
+            font-size: 0.875rem;
+        }
+
+        .return-type {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            color: var(--success-color);
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background: var(--surface-color);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-number {
+            display: block;
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .footer {
+            background: var(--surface-color);
+            border-top: 1px solid var(--border-color);
+            padding: 2rem 0;
+            text-align: center;
+            color: var(--text-secondary);
+            margin-top: 3rem;
+        }
+
+        mark {
+            background: rgba(245, 158, 11, 0.3);
+            color: #fbbf24;
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .search-box {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .search-filters {
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            
+            .stats {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .function-table {
+                font-size: 0.875rem;
+            }
+            
+            .function-table th,
+            .function-table td {
+                padding: 0.75rem 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1>MAKCU C++ Library</h1>
+            <p>High-performance mouse controller library with C++ and C APIs for sub-millisecond response times</p>
+        </div>
+    </header>
+
+    <div class="search-container">
+        <div class="container">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search functions, parameters, or descriptions...">
+                <div class="search-filters">
+                    <button class="filter-btn active" data-filter="all">All</button>
+                    <button class="filter-btn" data-filter="cpp">C++</button>
+                    <button class="filter-btn" data-filter="c">C API</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <main class="main-content">
+        <div class="container">
+            <div class="stats">
+                <div class="stat">
+                    <span class="stat-number" id="totalFunctions">0</span>
+                    <span class="stat-label">Total Functions</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-number" id="cppFunctions">0</span>
+                    <span class="stat-label">C++ Functions</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-number" id="cFunctions">0</span>
+                    <span class="stat-label">C Functions</span>
+                </div>
+            </div>
+
+            <!-- Device Management -->
+            <section class="api-section">
+                <div class="section-header">
+                    <h2 class="section-title">Device Management</h2>
+                    <span class="section-count" id="deviceCount">0</span>
+                </div>
+                <table class="function-table" data-category="device">
+                    <thead>
+                        <tr>
+                            <th style="width: 15%">Function</th>
+                            <th style="width: 45%">Signature & I/O</th>
+                            <th style="width: 40%">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- C++ API -->
+                        <tr data-api="cpp" data-function="device-constructor">
+                            <td>
+                                <div class="function-name">Device</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">Device();</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">Device instance</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Constructor for MAKCU device. Creates a new device instance ready for connection.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="device-destructor">
+                            <td>
+                                <div class="function-name">~Device</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">~Device();</div>
+                            </td>
+                            <td>
+                                <div class="function-description">Destructor. Automatically disconnects and cleans up resources.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="find-devices">
+                            <td>
+                                <div class="function-name">findDevices</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">static std::vector&lt;DeviceInfo&gt; findDevices();</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">std::vector&lt;DeviceInfo&gt;</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Discovers all available MAKCU devices on the system. Returns device information including port, VID/PID, and connection status.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="find-first-device">
+                            <td>
+                                <div class="function-name">findFirstDevice</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">static std::string findFirstDevice();</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">std::string (port name or empty)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Finds the first available MAKCU device. Returns empty string if no device found.</div>
+                            </td>
+                        </tr>
+                        
+                        <!-- C API -->
+                        <tr data-api="c" data-function="makcu-device-create">
+                            <td>
+                                <div class="function-name">makcu_device_create</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_device_t* makcu_device_create(void);</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_device_t* or NULL on failure</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Creates a new MAKCU device instance. Returns NULL on failure. Must be destroyed with makcu_device_destroy().</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-device-destroy">
+                            <td>
+                                <div class="function-name">makcu_device_destroy</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">void makcu_device_destroy(makcu_device_t* device);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device to destroy</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Destroys a device instance and frees all associated resources. Safe to call with NULL pointer.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-find-devices">
+                            <td>
+                                <div class="function-name">makcu_find_devices</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">int makcu_find_devices(makcu_device_info_t* devices, int max_devices);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">devices</span> <span class="param-type">makcu_device_info_t*</span> - Array to fill with device info</div>
+                                    <div class="parameter"><span class="param-name">max_devices</span> <span class="param-type">int</span> - Maximum number of devices to return</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">int (number of devices found)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Discovers available MAKCU devices and fills the provided array. Returns the actual number of devices found.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-find-first-device">
+                            <td>
+                                <div class="function-name">makcu_find_first_device</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_find_first_device(char* port, size_t port_size);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">port</span> <span class="param-type">char*</span> - Buffer to store port name</div>
+                                    <div class="parameter"><span class="param-name">port_size</span> <span class="param-type">size_t</span> - Size of port buffer</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Finds the first available MAKCU device and stores the port name in the provided buffer.</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Connection Management -->
+            <section class="api-section">
+                <div class="section-header">
+                    <h2 class="section-title">Connection Management</h2>
+                    <span class="section-count" id="connectionCount">0</span>
+                </div>
+                <table class="function-table" data-category="connection">
+                    <thead>
+                        <tr>
+                            <th style="width: 15%">Function</th>
+                            <th style="width: 45%">Signature & I/O</th>
+                            <th style="width: 40%">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- C++ API -->
+                        <tr data-api="cpp" data-function="connect">
+                            <td>
+                                <div class="function-name">connect</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool connect(const std::string& port = "");</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">port</span> <span class="param-type">const std::string&</span> - Port name (auto-detect if empty)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Connects to MAKCU device. Auto-detects device if port is empty. Switches to high-speed 4Mbaud communication automatically.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="connect-async">
+                            <td>
+                                <div class="function-name">connectAsync</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">std::future&lt;bool&gt; connectAsync(const std::string& port = "");</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">port</span> <span class="param-type">const std::string&</span> - Port name (auto-detect if empty)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">std::future&lt;bool&gt;</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Asynchronous connection to MAKCU device. Returns a future that resolves when connection completes.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="disconnect">
+                            <td>
+                                <div class="function-name">disconnect</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">void disconnect();</div>
+                            </td>
+                            <td>
+                                <div class="function-description">Disconnects from the device and cleans up all resources. Safe to call multiple times.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="is-connected">
+                            <td>
+                                <div class="function-name">isConnected</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool isConnected() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (connection state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Checks if device is currently connected. Thread-safe with atomic operations.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="get-status">
+                            <td>
+                                <div class="function-name">getStatus</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">ConnectionStatus getStatus() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">ConnectionStatus (DISCONNECTED, CONNECTING, CONNECTED, CONNECTION_ERROR)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Gets detailed connection status with enum values for precise state tracking.</div>
+                            </td>
+                        </tr>
+                        
+                        <!-- C API -->
+                        <tr data-api="c" data-function="makcu-connect">
+                            <td>
+                                <div class="function-name">makcu_connect</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_connect(makcu_device_t* device, const char* port);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">port</span> <span class="param-type">const char*</span> - Port name (NULL for auto-detect)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Connects to MAKCU device. Use NULL or empty string for port to auto-detect device.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-disconnect">
+                            <td>
+                                <div class="function-name">makcu_disconnect</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">void makcu_disconnect(makcu_device_t* device);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Disconnects from the device. Safe to call with NULL pointer or disconnected device.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-is-connected">
+                            <td>
+                                <div class="function-name">makcu_is_connected</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool makcu_is_connected(makcu_device_t* device);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (connection state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Checks if device is currently connected. Returns false for NULL device.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-get-status">
+                            <td>
+                                <div class="function-name">makcu_get_status</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_connection_status_t makcu_get_status(makcu_device_t* device);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_connection_status_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Gets detailed connection status. Returns MAKCU_STATUS_DISCONNECTED for NULL device.</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Mouse Control -->
+            <section class="api-section">
+                <div class="section-header">
+                    <h2 class="section-title">Mouse Control</h2>
+                    <span class="section-count" id="mouseCount">0</span>
+                </div>
+                <table class="function-table" data-category="mouse">
+                    <thead>
+                        <tr>
+                            <th style="width: 15%">Function</th>
+                            <th style="width: 45%">Signature & I/O</th>
+                            <th style="width: 40%">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- C++ API -->
+                        <tr data-api="cpp" data-function="mouse-down">
+                            <td>
+                                <div class="function-name">mouseDown</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool mouseDown(MouseButton button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">MouseButton</span> - LEFT, RIGHT, MIDDLE, SIDE1, SIDE2</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Press and hold a mouse button. High-performance fire-and-forget command (~40μs response time).</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="mouse-up">
+                            <td>
+                                <div class="function-name">mouseUp</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool mouseUp(MouseButton button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">MouseButton</span> - Button to release</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Release a mouse button. Optimized for gaming with cached command lookups.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="click">
+                            <td>
+                                <div class="function-name">click</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool click(MouseButton button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">MouseButton</span> - Button to click</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Combined press and release in one operation. Batched for maximum performance.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="mouse-move">
+                            <td>
+                                <div class="function-name">mouseMove</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool mouseMove(int32_t x, int32_t y);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">x</span> <span class="param-type">int32_t</span> - X offset in pixels (-32768 to 32767)</div>
+                                    <div class="parameter"><span class="param-name">y</span> <span class="param-type">int32_t</span> - Y offset in pixels (-32768 to 32767)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Move mouse cursor by relative offset. Instant movement with bounds checking.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="mouse-move-smooth">
+                            <td>
+                                <div class="function-name">mouseMoveSmooth</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool mouseMoveSmooth(int32_t x, int32_t y, uint32_t segments);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">x</span> <span class="param-type">int32_t</span> - X offset in pixels</div>
+                                    <div class="parameter"><span class="param-name">y</span> <span class="param-type">int32_t</span> - Y offset in pixels</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Number of interpolation steps (max 1000)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Smooth linear movement divided into segments. More natural mouse movement for automation.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="mouse-move-bezier">
+                            <td>
+                                <div class="function-name">mouseMoveBezier</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool mouseMoveBezier(int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x, int32_t ctrl_y);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">x, y</span> <span class="param-type">int32_t</span> - End point offset</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Curve resolution (max 1000)</div>
+                                    <div class="parameter"><span class="param-name">ctrl_x, ctrl_y</span> <span class="param-type">int32_t</span> - Control point offset</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Curved Bézier movement for human-like mouse paths. Ideal for avoiding detection in automation.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="mouse-wheel">
+                            <td>
+                                <div class="function-name">mouseWheel</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool mouseWheel(int32_t delta);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">delta</span> <span class="param-type">int32_t</span> - Scroll amount (-32768 to 32767, positive=up, negative=down)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Mouse wheel scrolling with optimized command buffer reuse.</div>
+                            </td>
+                        </tr>
+                        
+                        <!-- C API Mouse Control -->
+                        <tr data-api="c" data-function="makcu-mouse-down">
+                            <td>
+                                <div class="function-name">makcu_mouse_down</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_mouse_down(makcu_device_t* device, makcu_mouse_button_t button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to press</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Press and hold a mouse button. Values: MAKCU_MOUSE_LEFT, MAKCU_MOUSE_RIGHT, MAKCU_MOUSE_MIDDLE, MAKCU_MOUSE_SIDE1, MAKCU_MOUSE_SIDE2.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-mouse-up">
+                            <td>
+                                <div class="function-name">makcu_mouse_up</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_mouse_up(makcu_device_t* device, makcu_mouse_button_t button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to release</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Release a previously pressed mouse button.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-mouse-click">
+                            <td>
+                                <div class="function-name">makcu_mouse_click</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_mouse_click(makcu_device_t* device, makcu_mouse_button_t button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to click</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Complete click operation (press + release) in single function call.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-mouse-move">
+                            <td>
+                                <div class="function-name">makcu_mouse_move</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_mouse_move(makcu_device_t* device, int32_t x, int32_t y);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">x, y</span> <span class="param-type">int32_t</span> - Relative movement offset (-32768 to 32767)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Move mouse cursor by relative offset with bounds checking.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-mouse-move-smooth">
+                            <td>
+                                <div class="function-name">makcu_mouse_move_smooth</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_mouse_move_smooth(makcu_device_t* device, int32_t x, int32_t y, uint32_t segments);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">x, y</span> <span class="param-type">int32_t</span> - Target offset</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Number of steps (max 1000)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Smooth linear interpolated movement for natural mouse motion.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-mouse-wheel">
+                            <td>
+                                <div class="function-name">makcu_mouse_wheel</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_mouse_wheel(makcu_device_t* device, int32_t delta);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">delta</span> <span class="param-type">int32_t</span> - Scroll amount (positive=up, negative=down)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Mouse wheel scrolling with range validation.</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Mouse Locking -->
+            <section class="api-section">
+                <div class="section-header">
+                    <h2 class="section-title">Mouse Locking</h2>
+                    <span class="section-count" id="lockingCount">0</span>
+                </div>
+                <table class="function-table" data-category="locking">
+                    <thead>
+                        <tr>
+                            <th style="width: 15%">Function</th>
+                            <th style="width: 45%">Signature & I/O</th>
+                            <th style="width: 40%">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- C++ Locking Functions -->
+                        <tr data-api="cpp" data-function="lock-mouse-x">
+                            <td>
+                                <div class="function-name">lockMouseX</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool lockMouseX(bool lock = true);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - true to lock, false to unlock</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock horizontal mouse movement. Uses cached commands for maximum performance.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="lock-mouse-y">
+                            <td>
+                                <div class="function-name">lockMouseY</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool lockMouseY(bool lock = true);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - true to lock, false to unlock</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock vertical mouse movement with state caching.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="lock-mouse-left">
+                            <td>
+                                <div class="function-name">lockMouseLeft</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool lockMouseLeft(bool lock = true);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - Lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock left mouse button. Prevents physical button presses from reaching the system.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="lock-mouse-right">
+                            <td>
+                                <div class="function-name">lockMouseRight</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool lockMouseRight(bool lock = true);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - Lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock right mouse button. Prevents physical button presses from reaching the system.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="lock-mouse-middle">
+                            <td>
+                                <div class="function-name">lockMouseMiddle</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool lockMouseMiddle(bool lock = true);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - Lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock middle mouse button. Prevents physical button presses from reaching the system.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="lock-mouse-side1">
+                            <td>
+                                <div class="function-name">lockMouseSide1</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool lockMouseSide1(bool lock = true);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - Lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock side button 1. Prevents physical button presses from reaching the system.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="lock-mouse-side2">
+                            <td>
+                                <div class="function-name">lockMouseSide2</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool lockMouseSide2(bool lock = true);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - Lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock side button 2. Prevents physical button presses from reaching the system.</div>
+                            </td>
+                        </tr>
+                        
+                        <!-- C++ Lock State Queries -->
+                        <tr data-api="cpp" data-function="is-mouse-x-locked">
+                            <td>
+                                <div class="function-name">isMouseXLocked</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool isMouseXLocked() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (lock state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Fast cached query for X-axis lock state. Uses bitwise operations for optimal performance.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="is-mouse-y-locked">
+                            <td>
+                                <div class="function-name">isMouseYLocked</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool isMouseYLocked() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (lock state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Fast cached query for Y-axis lock state. Uses bitwise operations for optimal performance.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="is-mouse-left-locked">
+                            <td>
+                                <div class="function-name">isMouseLeftLocked</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool isMouseLeftLocked() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (lock state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Fast cached query for left button lock state. Uses bitwise operations for optimal performance.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="is-mouse-right-locked">
+                            <td>
+                                <div class="function-name">isMouseRightLocked</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool isMouseRightLocked() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (lock state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Fast cached query for right button lock state. Uses bitwise operations for optimal performance.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="is-mouse-middle-locked">
+                            <td>
+                                <div class="function-name">isMouseMiddleLocked</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool isMouseMiddleLocked() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (lock state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Fast cached query for middle button lock state. Uses bitwise operations for optimal performance.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="is-mouse-side1-locked">
+                            <td>
+                                <div class="function-name">isMouseSide1Locked</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool isMouseSide1Locked() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (lock state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Fast cached query for side button 1 lock state. Uses bitwise operations for optimal performance.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="is-mouse-side2-locked">
+                            <td>
+                                <div class="function-name">isMouseSide2Locked</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool isMouseSide2Locked() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (lock state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Fast cached query for side button 2 lock state. Uses bitwise operations for optimal performance.</div>
+                            </td>
+                        </tr>
+                        
+                        <!-- C API Locking Functions -->
+                        <tr data-api="c" data-function="makcu-lock-mouse-x">
+                            <td>
+                                <div class="function-name">makcu_lock_mouse_x</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_lock_mouse_x(makcu_device_t* device, bool lock);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - Lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock horizontal mouse movement.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-lock-mouse-y">
+                            <td>
+                                <div class="function-name">makcu_lock_mouse_y</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_lock_mouse_y(makcu_device_t* device, bool lock);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - Lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock vertical mouse movement.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-lock-mouse-left">
+                            <td>
+                                <div class="function-name">makcu_lock_mouse_left</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_lock_mouse_left(makcu_device_t* device, bool lock);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - Lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock left mouse button.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-lock-mouse-middle">
+                            <td>
+                                <div class="function-name">makcu_lock_mouse_middle</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_lock_mouse_middle(makcu_device_t* device, bool lock);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - Lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock middle mouse button.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-lock-mouse-right">
+                            <td>
+                                <div class="function-name">makcu_lock_mouse_right</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_lock_mouse_right(makcu_device_t* device, bool lock);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - Lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock right mouse button.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-lock-mouse-side1">
+                            <td>
+                                <div class="function-name">makcu_lock_mouse_side1</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_lock_mouse_side1(makcu_device_t* device, bool lock);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - Lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock side button 1.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-lock-mouse-side2">
+                            <td>
+                                <div class="function-name">makcu_lock_mouse_side2</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_lock_mouse_side2(makcu_device_t* device, bool lock);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">lock</span> <span class="param-type">bool</span> - Lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Lock/unlock side button 2.</div>
+                            </td>
+                        </tr>
+                        
+                        <!-- C API Lock State Queries -->
+                        <tr data-api="c" data-function="makcu-is-mouse-x-locked">
+                            <td>
+                                <div class="function-name">makcu_is_mouse_x_locked</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_is_mouse_x_locked(makcu_device_t* device, bool* locked);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">locked</span> <span class="param-type">bool*</span> - Output lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Query X-axis lock state. Uses cached values for fast access.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-is-mouse-y-locked">
+                            <td>
+                                <div class="function-name">makcu_is_mouse_y_locked</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_is_mouse_y_locked(makcu_device_t* device, bool* locked);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">locked</span> <span class="param-type">bool*</span> - Output lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Query Y-axis lock state. Uses cached values for fast access.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-is-mouse-left-locked">
+                            <td>
+                                <div class="function-name">makcu_is_mouse_left_locked</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_is_mouse_left_locked(makcu_device_t* device, bool* locked);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">locked</span> <span class="param-type">bool*</span> - Output lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Query left button lock state. Uses cached values for fast access.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-is-mouse-middle-locked">
+                            <td>
+                                <div class="function-name">makcu_is_mouse_middle_locked</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_is_mouse_middle_locked(makcu_device_t* device, bool* locked);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">locked</span> <span class="param-type">bool*</span> - Output lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Query middle button lock state. Uses cached values for fast access.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-is-mouse-right-locked">
+                            <td>
+                                <div class="function-name">makcu_is_mouse_right_locked</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_is_mouse_right_locked(makcu_device_t* device, bool* locked);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">locked</span> <span class="param-type">bool*</span> - Output lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Query right button lock state. Uses cached values for fast access.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-is-mouse-side1-locked">
+                            <td>
+                                <div class="function-name">makcu_is_mouse_side1_locked</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_is_mouse_side1_locked(makcu_device_t* device, bool* locked);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">locked</span> <span class="param-type">bool*</span> - Output lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Query side button 1 lock state. Uses cached values for fast access.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-is-mouse-side2-locked">
+                            <td>
+                                <div class="function-name">makcu_is_mouse_side2_locked</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_is_mouse_side2_locked(makcu_device_t* device, bool* locked);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">locked</span> <span class="param-type">bool*</span> - Output lock state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Query side button 2 lock state. Uses cached values for fast access.</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Device Information -->
+            <section class="api-section">
+                <div class="section-header">
+                    <h2 class="section-title">Device Information</h2>
+                    <span class="section-count" id="infoCount">0</span>
+                </div>
+                <table class="function-table" data-category="info">
+                    <thead>
+                        <tr>
+                            <th style="width: 15%">Function</th>
+                            <th style="width: 45%">Signature & I/O</th>
+                            <th style="width: 40%">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- C++ Device Info -->
+                        <tr data-api="cpp" data-function="get-device-info">
+                            <td>
+                                <div class="function-name">getDeviceInfo</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">DeviceInfo getDeviceInfo() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">DeviceInfo (port, description, VID/PID, connection status)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Returns device information including port name, description, VID/PID (1A86:55D3), and connection status.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="get-version">
+                            <td>
+                                <div class="function-name">getVersion</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">std::string getVersion() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">std::string (firmware version or empty)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Gets firmware version from MAKCU device. Returns empty string if not connected or on error.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="set-baud-rate">
+                            <td>
+                                <div class="function-name">setBaudRate</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool setBaudRate(uint32_t baudRate, bool validateCommunication = true);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">baudRate</span> <span class="param-type">uint32_t</span> - Target baud rate (115200-4000000)</div>
+                                    <div class="parameter"><span class="param-name">validateCommunication</span> <span class="param-type">bool</span> - Test communication after change</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Changes device communication speed. Non-permanent change (resets on power cycle). Auto-reconnects at new rate.</div>
+                            </td>
+                        </tr>
+                        
+                        <!-- C API Device Info -->
+                        <tr data-api="c" data-function="makcu-get-device-info">
+                            <td>
+                                <div class="function-name">makcu_get_device_info</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_get_device_info(makcu_device_t* device, makcu_device_info_t* info);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">info</span> <span class="param-type">makcu_device_info_t*</span> - Output device information</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Fills device information structure with port, description, VID/PID, and connection status.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-get-version">
+                            <td>
+                                <div class="function-name">makcu_get_version</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_get_version(makcu_device_t* device, char* version, size_t version_size);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">version</span> <span class="param-type">char*</span> - Buffer for version string</div>
+                                    <div class="parameter"><span class="param-name">version_size</span> <span class="param-type">size_t</span> - Buffer size</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Gets firmware version string from device and stores in provided buffer.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-set-baud-rate">
+                            <td>
+                                <div class="function-name">makcu_set_baud_rate</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_set_baud_rate(makcu_device_t* device, uint32_t baud_rate);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">baud_rate</span> <span class="param-type">uint32_t</span> - Target baud rate</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Changes device communication speed with automatic validation and reconnection.</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Advanced Features -->
+            <section class="api-section">
+                <div class="section-header">
+                    <h2 class="section-title">Advanced Features</h2>
+                    <span class="section-count" id="advancedCount">0</span>
+                </div>
+                <table class="function-table" data-category="advanced">
+                    <thead>
+                        <tr>
+                            <th style="width: 15%">Function</th>
+                            <th style="width: 45%">Signature & I/O</th>
+                            <th style="width: 40%">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- C++ Advanced Features -->
+                        <tr data-api="cpp" data-function="create-batch">
+                            <td>
+                                <div class="function-name">createBatch</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">BatchCommandBuilder createBatch();</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">BatchCommandBuilder</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Creates a batch command builder for grouping multiple operations. Maximizes performance by reducing communication overhead.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="enable-high-performance">
+                            <td>
+                                <div class="function-name">enableHighPerformanceMode</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">void enableHighPerformanceMode(bool enable = true);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">enable</span> <span class="param-type">bool</span> - Enable fire-and-forget mode</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Enables fire-and-forget mode for gaming. Disables response waiting for maximum speed (~28x faster than Python).</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="click-sequence">
+                            <td>
+                                <div class="function-name">clickSequence</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool clickSequence(const std::vector&lt;MouseButton&gt;& buttons, std::chrono::milliseconds delay = 50ms);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">buttons</span> <span class="param-type">std::vector&lt;MouseButton&gt;</span> - Sequence of buttons to click</div>
+                                    <div class="parameter"><span class="param-name">delay</span> <span class="param-type">std::chrono::milliseconds</span> - Delay between clicks</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Automated sequence of mouse clicks with customizable timing. Useful for complex interactions.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="move-pattern">
+                            <td>
+                                <div class="function-name">movePattern</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool movePattern(const std::vector&lt;std::pair&lt;int32_t, int32_t&gt;&gt;& points, bool smooth = true, uint32_t segments = 10);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">points</span> <span class="param-type">std::vector&lt;std::pair&lt;int32_t, int32_t&gt;&gt;</span> - Movement waypoints</div>
+                                    <div class="parameter"><span class="param-name">smooth</span> <span class="param-type">bool</span> - Use smooth interpolation</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Smoothing resolution</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Execute complex movement patterns through multiple waypoints with optional smoothing.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="catch-mouse-left">
+                            <td>
+                                <div class="function-name">catchMouseLeft</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">uint8_t catchMouseLeft();</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">uint8_t (button press count/state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Capture physical left mouse button presses without affecting system. Returns button press count or state.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="catch-mouse-middle">
+                            <td>
+                                <div class="function-name">catchMouseMiddle</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">uint8_t catchMouseMiddle();</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">uint8_t (button press count/state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Capture physical middle mouse button presses without affecting system. Returns button press count or state.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="catch-mouse-right">
+                            <td>
+                                <div class="function-name">catchMouseRight</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">uint8_t catchMouseRight();</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">uint8_t (button press count/state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Capture physical right mouse button presses without affecting system. Returns button press count or state.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="catch-mouse-side1">
+                            <td>
+                                <div class="function-name">catchMouseSide1</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">uint8_t catchMouseSide1();</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">uint8_t (button press count/state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Capture physical side button 1 presses without affecting system. Returns button press count or state.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="catch-mouse-side2">
+                            <td>
+                                <div class="function-name">catchMouseSide2</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">uint8_t catchMouseSide2();</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">uint8_t (button press count/state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Capture physical side button 2 presses without affecting system. Returns button press count or state.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="get-mouse-serial">
+                            <td>
+                                <div class="function-name">getMouseSerial</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">std::string getMouseSerial();</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">std::string (device serial number)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Get the device serial number for identification. Useful for hardware fingerprinting.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="set-mouse-serial">
+                            <td>
+                                <div class="function-name">setMouseSerial</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool setMouseSerial(const std::string& serial);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">serial</span> <span class="param-type">const std::string&</span> - New serial number</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Set a custom device serial number for identification spoofing. Useful for bypassing hardware fingerprinting.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="reset-mouse-serial">
+                            <td>
+                                <div class="function-name">resetMouseSerial</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool resetMouseSerial();</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Reset device serial number to factory default.</div>
+                            </td>
+                        </tr>
+                        
+                        <!-- C API Advanced Features -->
+                        <tr data-api="c" data-function="makcu-create-batch">
+                            <td>
+                                <div class="function-name">makcu_create_batch</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_batch_builder_t* makcu_create_batch(makcu_device_t* device);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_batch_builder_t* or NULL</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Create a batch command builder for grouping operations. Must be destroyed with makcu_batch_destroy().</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-destroy">
+                            <td>
+                                <div class="function-name">makcu_batch_destroy</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">void makcu_batch_destroy(makcu_batch_builder_t* batch);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch builder to destroy</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Destroy a batch command builder and free resources.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-execute">
+                            <td>
+                                <div class="function-name">makcu_batch_execute</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_batch_execute(makcu_batch_builder_t* batch);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch to execute</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Execute all commands in the batch sequentially.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-enable-high-performance-mode">
+                            <td>
+                                <div class="function-name">makcu_enable_high_performance_mode</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_enable_high_performance_mode(makcu_device_t* device, bool enable);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">enable</span> <span class="param-type">bool</span> - Enable/disable high performance mode</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Control high-performance fire-and-forget mode for maximum speed gaming applications.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-is-high-performance-mode-enabled">
+                            <td>
+                                <div class="function-name">makcu_is_high_performance_mode_enabled</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_is_high_performance_mode_enabled(makcu_device_t* device, bool* enabled);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">enabled</span> <span class="param-type">bool*</span> - Output performance mode state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Check if high-performance mode is currently enabled.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-click-sequence">
+                            <td>
+                                <div class="function-name">makcu_click_sequence</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_click_sequence(makcu_device_t* device, const makcu_mouse_button_t* buttons, size_t count, uint32_t delay_ms);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">buttons</span> <span class="param-type">const makcu_mouse_button_t*</span> - Array of buttons to click</div>
+                                    <div class="parameter"><span class="param-name">count</span> <span class="param-type">size_t</span> - Number of buttons in array</div>
+                                    <div class="parameter"><span class="param-name">delay_ms</span> <span class="param-type">uint32_t</span> - Delay between clicks in milliseconds</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Execute a sequence of mouse clicks with specified delay between each click.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-move-pattern">
+                            <td>
+                                <div class="function-name">makcu_move_pattern</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_move_pattern(makcu_device_t* device, const makcu_point_t* points, size_t count, bool smooth, uint32_t segments);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">points</span> <span class="param-type">const makcu_point_t*</span> - Array of movement points</div>
+                                    <div class="parameter"><span class="param-name">count</span> <span class="param-type">size_t</span> - Number of points</div>
+                                    <div class="parameter"><span class="param-name">smooth</span> <span class="param-type">bool</span> - Use smooth interpolation</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Smoothing resolution</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Execute complex movement patterns through multiple waypoints with optional smoothing.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-profiler-enable">
+                            <td>
+                                <div class="function-name">makcu_profiler_enable</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">void makcu_profiler_enable(bool enable);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">enable</span> <span class="param-type">bool</span> - Enable/disable profiling</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Enable/disable performance profiling system to track command execution times.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-profiler-reset-stats">
+                            <td>
+                                <div class="function-name">makcu_profiler_reset_stats</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">void makcu_profiler_reset_stats(void);</div>
+                            </td>
+                            <td>
+                                <div class="function-description">Reset all performance statistics to zero.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-profiler-get-stats">
+                            <td>
+                                <div class="function-name">makcu_profiler_get_stats</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">int makcu_profiler_get_stats(makcu_perf_stat_t* stats, int max_stats);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">stats</span> <span class="param-type">makcu_perf_stat_t*</span> - Array to fill with statistics</div>
+                                    <div class="parameter"><span class="param-name">max_stats</span> <span class="param-type">int</span> - Maximum statistics to return</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">int (number of stats returned)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Get performance statistics including command names, call counts, and total execution times.</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <div class="no-results" id="noResults" style="display: none;">
+                <p>No functions found matching your search criteria.</p>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>MAKCU C++ Library API Reference - High-performance mouse controller with sub-millisecond response times</p>
+            <p>Generated from source code analysis • VID:PID 1A86:55D3 • Performance: ~40μs response time</p>
+        </div>
+    </footer>
+
+    <script>
+        // Search and filter functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('searchInput');
+            const filterButtons = document.querySelectorAll('.filter-btn');
+            const functionRows = document.querySelectorAll('.function-table tbody tr');
+            const noResults = document.getElementById('noResults');
+            const apiSections = document.querySelectorAll('.api-section');
+            
+            let currentFilter = 'all';
+            let currentSearch = '';
+
+            // Update statistics
+            function updateStats() {
+                const totalFunctions = functionRows.length;
+                const cppFunctions = document.querySelectorAll('[data-api="cpp"]').length;
+                const cFunctions = document.querySelectorAll('[data-api="c"]').length;
+                
+                document.getElementById('totalFunctions').textContent = totalFunctions;
+                document.getElementById('cppFunctions').textContent = cppFunctions;
+                document.getElementById('cFunctions').textContent = cFunctions;
+
+                // Update section counts
+                document.getElementById('deviceCount').textContent = document.querySelectorAll('[data-category="device"] tbody tr').length;
+                document.getElementById('connectionCount').textContent = document.querySelectorAll('[data-category="connection"] tbody tr').length;
+                document.getElementById('mouseCount').textContent = document.querySelectorAll('[data-category="mouse"] tbody tr').length;
+                document.getElementById('lockingCount').textContent = document.querySelectorAll('[data-category="locking"] tbody tr').length;
+                document.getElementById('infoCount').textContent = document.querySelectorAll('[data-category="info"] tbody tr').length;
+                document.getElementById('advancedCount').textContent = document.querySelectorAll('[data-category="advanced"] tbody tr').length;
+            }
+
+            // Filter and search functions
+            function filterAndSearch() {
+                let visibleCount = 0;
+                const sectionVisibility = {};
+
+                functionRows.forEach(row => {
+                    const apiType = row.dataset.api;
+                    const functionName = row.querySelector('.function-name').textContent.toLowerCase();
+                    const signature = row.querySelector('.function-signature').textContent.toLowerCase();
+                    const description = row.querySelector('.function-description').textContent.toLowerCase();
+                    const category = row.closest('.function-table').dataset.category;
+                    
+                    const matchesFilter = currentFilter === 'all' || apiType === currentFilter;
+                    const matchesSearch = currentSearch === '' || 
+                        functionName.includes(currentSearch) || 
+                        signature.includes(currentSearch) || 
+                        description.includes(currentSearch);
+                    
+                    const isVisible = matchesFilter && matchesSearch;
+                    
+                    if (isVisible) {
+                        row.style.display = '';
+                        visibleCount++;
+                        sectionVisibility[category] = true;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+
+                // Show/hide sections based on content
+                apiSections.forEach(section => {
+                    const table = section.querySelector('.function-table');
+                    const category = table.dataset.category;
+                    const hasVisibleRows = sectionVisibility[category];
+                    
+                    if (hasVisibleRows) {
+                        section.style.display = '';
+                    } else {
+                        section.style.display = 'none';
+                    }
+                });
+
+                // Show/hide no results message
+                if (visibleCount === 0) {
+                    noResults.style.display = 'block';
+                } else {
+                    noResults.style.display = 'none';
+                }
+            }
+
+            // Search input handler
+            searchInput.addEventListener('input', function() {
+                currentSearch = this.value.toLowerCase();
+                filterAndSearch();
+            });
+
+            // Filter button handlers
+            filterButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    filterButtons.forEach(btn => btn.classList.remove('active'));
+                    this.classList.add('active');
+                    currentFilter = this.dataset.filter;
+                    filterAndSearch();
+                });
+            });
+
+            // Initialize
+            updateStats();
+            filterAndSearch();
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.key === 'f') {
+                    e.preventDefault();
+                    searchInput.focus();
+                }
+                if (e.key === 'Escape') {
+                    searchInput.value = '';
+                    currentSearch = '';
+                    filterAndSearch();
+                }
+            });
+
+            // Highlight search terms
+            function highlightSearchTerms() {
+                if (currentSearch) {
+                    functionRows.forEach(row => {
+                        if (row.style.display !== 'none') {
+                            const elements = row.querySelectorAll('.function-name, .function-signature, .function-description');
+                            elements.forEach(el => {
+                                const text = el.textContent;
+                                const regex = new RegExp(`(${currentSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                                if (regex.test(text) && !el.querySelector('mark')) {
+                                    el.innerHTML = text.replace(regex, '<mark style="background: rgba(245, 158, 11, 0.3); color: #fbbf24; padding: 0 2px; border-radius: 2px;">$1</mark>');
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+
+            // Enhanced search with highlighting
+            searchInput.addEventListener('input', function() {
+                // Remove previous highlights
+                document.querySelectorAll('mark').forEach(mark => {
+                    const parent = mark.parentNode;
+                    parent.replaceChild(document.createTextNode(mark.textContent), mark);
+                    parent.normalize();
+                });
+                
+                currentSearch = this.value.toLowerCase();
+                filterAndSearch();
+                
+                if (currentSearch) {
+                    setTimeout(highlightSearchTerms, 10);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
