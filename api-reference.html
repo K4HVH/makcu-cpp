@@ -500,6 +500,69 @@
                         </tr>
                         
                         <!-- C API -->
+                        <tr data-api="c" data-function="makcu-error-string">
+                            <td>
+                                <div class="function-name">makcu_error_string</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">const char* makcu_error_string(makcu_error_t error);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">error</span> <span class="param-type">makcu_error_t</span> - Error code to convert to string</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">const char* - Human-readable error message</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Converts an error code to a human-readable string. Returns a static string that describes the error condition.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-mouse-button-to-string">
+                            <td>
+                                <div class="function-name">makcu_mouse_button_to_string</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">const char* makcu_mouse_button_to_string(makcu_mouse_button_t button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to convert</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">const char* - String representation of button</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Converts a mouse button enum value to its string representation (e.g., "left", "right", "middle").</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-string-to-mouse-button">
+                            <td>
+                                <div class="function-name">makcu_string_to_mouse_button</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_mouse_button_t makcu_string_to_mouse_button(const char* button_name);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button_name</span> <span class="param-type">const char*</span> - String name of button</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_mouse_button_t - Button enum value</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Converts a string representation to its corresponding mouse button enum value.</div>
+                            </td>
+                        </tr>
                         <tr data-api="c" data-function="makcu-device-create">
                             <td>
                                 <div class="function-name">makcu_device_create</div>
@@ -770,6 +833,52 @@
                                 <div class="function-description">Gets detailed connection status. Returns MAKCU_STATUS_DISCONNECTED for NULL device.</div>
                             </td>
                         </tr>
+                        <tr data-api="c" data-function="makcu-set-mouse-button-callback">
+                            <td>
+                                <div class="function-name">makcu_set_mouse_button_callback</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_set_mouse_button_callback(makcu_device_t* device, makcu_mouse_button_callback_t callback, void* user_data);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">callback</span> <span class="param-type">makcu_mouse_button_callback_t</span> - Callback function pointer</div>
+                                    <div class="parameter"><span class="param-name">user_data</span> <span class="param-type">void*</span> - User data passed to callback</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Sets a callback function to be called when mouse button events occur.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-set-connection-callback">
+                            <td>
+                                <div class="function-name">makcu_set_connection_callback</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_set_connection_callback(makcu_device_t* device, makcu_connection_callback_t callback, void* user_data);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">callback</span> <span class="param-type">makcu_connection_callback_t</span> - Callback function pointer</div>
+                                    <div class="parameter"><span class="param-name">user_data</span> <span class="param-type">void*</span> - User data passed to callback</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Sets a callback function to be called when connection state changes.</div>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </section>
@@ -853,6 +962,27 @@
                                 <div class="function-description">Combined press and release in one operation. Batched for maximum performance.</div>
                             </td>
                         </tr>
+                        <tr data-api="cpp" data-function="mouse-button-state">
+                            <td>
+                                <div class="function-name">mouseButtonState</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool mouseButtonState(MouseButton button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">MouseButton</span> - Button to query</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true if pressed)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Query current mouse button state with caching for performance.</div>
+                            </td>
+                        </tr>
                         <tr data-api="cpp" data-function="mouse-move">
                             <td>
                                 <div class="function-name">mouseMove</div>
@@ -919,6 +1049,75 @@
                             </td>
                             <td>
                                 <div class="function-description">Curved Bézier movement for human-like mouse paths. Ideal for avoiding detection in automation.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="mouse-drag">
+                            <td>
+                                <div class="function-name">mouseDrag</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool mouseDrag(MouseButton button, int32_t x, int32_t y);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">MouseButton</span> - Mouse button to hold during drag</div>
+                                    <div class="parameter"><span class="param-name">x, y</span> <span class="param-type">int32_t</span> - Target offset</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">High-performance drag operation combining button press, move, and release.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="mouse-drag-smooth">
+                            <td>
+                                <div class="function-name">mouseDragSmooth</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool mouseDragSmooth(MouseButton button, int32_t x, int32_t y, uint32_t segments = 10);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">MouseButton</span> - Mouse button to hold during drag</div>
+                                    <div class="parameter"><span class="param-name">x, y</span> <span class="param-type">int32_t</span> - Target offset</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Number of movement steps (default: 10)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Smooth drag operation with interpolated movement for natural motion.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="mouse-drag-bezier">
+                            <td>
+                                <div class="function-name">mouseDragBezier</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool mouseDragBezier(MouseButton button, int32_t x, int32_t y, uint32_t segments = 20, int32_t ctrl_x = 0, int32_t ctrl_y = 0);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">MouseButton</span> - Mouse button to hold during drag</div>
+                                    <div class="parameter"><span class="param-name">x, y</span> <span class="param-type">int32_t</span> - Target offset</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Number of curve segments (default: 20)</div>
+                                    <div class="parameter"><span class="param-name">ctrl_x, ctrl_y</span> <span class="param-type">int32_t</span> - Control point offset (default: 0, 0)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Bezier curve drag operation for human-like dragging motions.</div>   
                             </td>
                         </tr>
                         <tr data-api="cpp" data-function="mouse-wheel">
@@ -1010,6 +1209,29 @@
                                 <div class="function-description">Complete click operation (press + release) in single function call.</div>
                             </td>
                         </tr>
+                        <tr data-api="c" data-function="makcu-mouse-button-state">
+                            <td>
+                                <div class="function-name">makcu_mouse_button_state</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_mouse_button_state(makcu_device_t* device, makcu_mouse_button_t button, bool* state);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to query</div>
+                                    <div class="parameter"><span class="param-name">state</span> <span class="param-type">bool*</span> - Output pointer for button state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Queries the current state of a mouse button. Returns true if button is currently pressed, false if released.</div>
+                            </td>
+                        </tr>
                         <tr data-api="c" data-function="makcu-mouse-move">
                             <td>
                                 <div class="function-name">makcu_mouse_move</div>
@@ -1055,6 +1277,30 @@
                                 <div class="function-description">Smooth linear interpolated movement for natural mouse motion.</div>
                             </td>
                         </tr>
+                        <tr data-api="c" data-function="makcu-mouse-move-bezier">
+                            <td>
+                                <div class="function-name">makcu_mouse_move_bezier</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_mouse_move_bezier(makcu_device_t* device, int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x, int32_t ctrl_y);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">x, y</span> <span class="param-type">int32_t</span> - Target offset</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Number of curve segments (max 1000)</div>
+                                    <div class="parameter"><span class="param-name">ctrl_x, ctrl_y</span> <span class="param-type">int32_t</span> - Control point offset</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Bezier curve movement for smooth, natural mouse motion with customizable trajectory.</div>
+                            </td>
+                        </tr>
                         <tr data-api="c" data-function="makcu-mouse-wheel">
                             <td>
                                 <div class="function-name">makcu_mouse_wheel</div>
@@ -1075,6 +1321,82 @@
                             </td>
                             <td>
                                 <div class="function-description">Mouse wheel scrolling with range validation.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-mouse-drag">
+                            <td>
+                                <div class="function-name">makcu_mouse_drag</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_mouse_drag(makcu_device_t* device, makcu_mouse_button_t button, int32_t x, int32_t y);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to hold during drag</div>
+                                    <div class="parameter"><span class="param-name">x</span> <span class="param-type">int32_t</span> - X coordinate to drag to</div>
+                                    <div class="parameter"><span class="param-name">y</span> <span class="param-type">int32_t</span> - Y coordinate to drag to</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Performs a drag operation by pressing the button, moving to the target position, and releasing the button.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-mouse-drag-smooth">
+                            <td>
+                                <div class="function-name">makcu_mouse_drag_smooth</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_mouse_drag_smooth(makcu_device_t* device, makcu_mouse_button_t button, int32_t x, int32_t y, uint32_t segments);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to hold during drag</div>
+                                    <div class="parameter"><span class="param-name">x</span> <span class="param-type">int32_t</span> - X coordinate to drag to</div>
+                                    <div class="parameter"><span class="param-name">y</span> <span class="param-type">int32_t</span> - Y coordinate to drag to</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Number of movement segments for smoothness</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Smooth drag operation with interpolated movement between start and end positions.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-mouse-drag-bezier">
+                            <td>
+                                <div class="function-name">makcu_mouse_drag_bezier</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_mouse_drag_bezier(makcu_device_t* device, makcu_mouse_button_t button, int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x, int32_t ctrl_y);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to hold during drag</div>
+                                    <div class="parameter"><span class="param-name">x</span> <span class="param-type">int32_t</span> - X coordinate to drag to</div>
+                                    <div class="parameter"><span class="param-name">y</span> <span class="param-type">int32_t</span> - Y coordinate to drag to</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Number of movement segments</div>
+                                    <div class="parameter"><span class="param-name">ctrl_x</span> <span class="param-type">int32_t</span> - X coordinate of Bezier control point</div>
+                                    <div class="parameter"><span class="param-name">ctrl_y</span> <span class="param-type">int32_t</span> - Y coordinate of Bezier control point</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Bezier curve drag operation for natural-looking drag paths with customizable trajectory.</div>
                             </td>
                         </tr>
                     </tbody>
@@ -1363,6 +1685,78 @@
                             </td>
                             <td>
                                 <div class="function-description">Fast cached query for side button 2 lock state. Uses bitwise operations for optimal performance.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="get-all-lock-states">
+                            <td>
+                                <div class="function-name">getAllLockStates</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">std::unordered_map&lt;std::string, bool&gt; getAllLockStates() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">std::unordered_map&lt;std::string, bool&gt; (all lock states)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Batch query for all lock states in a single call. Returns map with keys like "x", "y", "left", "right", etc.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="enable-button-monitoring">
+                            <td>
+                                <div class="function-name">enableButtonMonitoring</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool enableButtonMonitoring(bool enable = true);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">enable</span> <span class="param-type">bool</span> - Enable/disable monitoring (default: true)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Enable or disable button state monitoring with optimized processing.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="is-button-monitoring-enabled">
+                            <td>
+                                <div class="function-name">isButtonMonitoringEnabled</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool isButtonMonitoringEnabled() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (monitoring state)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Query current button monitoring state.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="get-button-mask">
+                            <td>
+                                <div class="function-name">getButtonMask</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">uint8_t getButtonMask() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">uint8_t (button state bitmask)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Get current button states as bitmask for efficient state checking.</div>
                             </td>
                         </tr>
                         
@@ -1822,6 +2216,72 @@
                                 <div class="function-description">Changes device communication speed with automatic validation and reconnection.</div>
                             </td>
                         </tr>
+                        <tr data-api="c" data-function="makcu-get-mouse-serial">
+                            <td>
+                                <div class="function-name">makcu_get_mouse_serial</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_get_mouse_serial(makcu_device_t* device, char* serial, size_t serial_size);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">serial</span> <span class="param-type">char*</span> - Buffer for serial number</div>
+                                    <div class="parameter"><span class="param-name">serial_size</span> <span class="param-type">size_t</span> - Buffer size</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Retrieves the current mouse serial number identifier.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-set-mouse-serial">
+                            <td>
+                                <div class="function-name">makcu_set_mouse_serial</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_set_mouse_serial(makcu_device_t* device, const char* serial);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">serial</span> <span class="param-type">const char*</span> - New serial number</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Sets a custom mouse serial number for device identification spoofing.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-reset-mouse-serial">
+                            <td>
+                                <div class="function-name">makcu_reset_mouse_serial</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_reset_mouse_serial(makcu_device_t* device);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Resets the mouse serial number back to the original factory value.</div>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </section>
@@ -1842,23 +2302,6 @@
                     </thead>
                     <tbody>
                         <!-- C++ Advanced Features -->
-                        <tr data-api="cpp" data-function="create-batch">
-                            <td>
-                                <div class="function-name">createBatch</div>
-                                <span class="api-type cpp">C++</span>
-                                <span class="api-type software">Software</span>
-                            </td>
-                            <td>
-                                <div class="function-signature">BatchCommandBuilder createBatch();</div>
-                                <div class="return-info">
-                                    <div class="return-title">Returns:</div>
-                                    <div class="return-type">BatchCommandBuilder</div>
-                                </div>
-                            </td>
-                            <td>
-                                <div class="function-description">Creates a batch command builder for grouping multiple operations. Maximizes performance by reducing communication overhead.</div>
-                            </td>
-                        </tr>
                         <tr data-api="cpp" data-function="enable-high-performance">
                             <td>
                                 <div class="function-name">enableHighPerformanceMode</div>
@@ -2063,55 +2506,18 @@
                         </tr>
                         
                         <!-- C API Advanced Features -->
-                        <tr data-api="c" data-function="makcu-create-batch">
+                        <tr data-api="c" data-function="makcu-catch-mouse-left">
                             <td>
-                                <div class="function-name">makcu_create_batch</div>
+                                <div class="function-name">makcu_catch_mouse_left</div>
                                 <span class="api-type c">C API</span>
-                                <span class="api-type software">Software</span>
+                                <span class="api-type native">Native</span>
                             </td>
                             <td>
-                                <div class="function-signature">makcu_batch_builder_t* makcu_create_batch(makcu_device_t* device);</div>
+                                <div class="function-signature">makcu_error_t makcu_catch_mouse_left(makcu_device_t* device, uint8_t* result);</div>
                                 <div class="parameters">
                                     <div class="parameters-title">Parameters:</div>
                                     <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
-                                </div>
-                                <div class="return-info">
-                                    <div class="return-title">Returns:</div>
-                                    <div class="return-type">makcu_batch_builder_t* or NULL</div>
-                                </div>
-                            </td>
-                            <td>
-                                <div class="function-description">Create a batch command builder for grouping operations. Must be destroyed with makcu_batch_destroy().</div>
-                            </td>
-                        </tr>
-                        <tr data-api="c" data-function="makcu-batch-destroy">
-                            <td>
-                                <div class="function-name">makcu_batch_destroy</div>
-                                <span class="api-type c">C API</span>
-                                <span class="api-type software">Software</span>
-                            </td>
-                            <td>
-                                <div class="function-signature">void makcu_batch_destroy(makcu_batch_builder_t* batch);</div>
-                                <div class="parameters">
-                                    <div class="parameters-title">Parameters:</div>
-                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch builder to destroy</div>
-                                </div>
-                            </td>
-                            <td>
-                                <div class="function-description">Destroy a batch command builder and free resources.</div>
-                            </td>
-                        </tr>
-                        <tr data-api="c" data-function="makcu-batch-execute">
-                            <td>
-                                <div class="function-name">makcu_batch_execute</div>
-                                <span class="api-type c">C API</span>
-                                <span class="api-type software">Software</span>
-                            </td>
-                            <td>
-                                <div class="function-signature">makcu_error_t makcu_batch_execute(makcu_batch_builder_t* batch);</div>
-                                <div class="parameters">
-                                    <div class="parameters-title">Parameters:</div>
-                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch to execute</div>
+                                    <div class="parameter"><span class="param-name">result</span> <span class="param-type">uint8_t*</span> - Output pointer for input result</div>
                                 </div>
                                 <div class="return-info">
                                     <div class="return-title">Returns:</div>
@@ -2119,7 +2525,161 @@
                                 </div>
                             </td>
                             <td>
-                                <div class="function-description">Execute all commands in the batch sequentially.</div>
+                                <div class="function-description">Captures and intercepts left mouse button input before it reaches the system.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-catch-mouse-middle">
+                            <td>
+                                <div class="function-name">makcu_catch_mouse_middle</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_catch_mouse_middle(makcu_device_t* device, uint8_t* result);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">result</span> <span class="param-type">uint8_t*</span> - Output pointer for input result</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Captures and intercepts middle mouse button input before it reaches the system.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-catch-mouse-right">
+                            <td>
+                                <div class="function-name">makcu_catch_mouse_right</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_catch_mouse_right(makcu_device_t* device, uint8_t* result);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">result</span> <span class="param-type">uint8_t*</span> - Output pointer for input result</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Captures and intercepts right mouse button input before it reaches the system.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-catch-mouse-side1">
+                            <td>
+                                <div class="function-name">makcu_catch_mouse_side1</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_catch_mouse_side1(makcu_device_t* device, uint8_t* result);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">result</span> <span class="param-type">uint8_t*</span> - Output pointer for input result</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Captures and intercepts side button 1 input before it reaches the system.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-catch-mouse-side2">
+                            <td>
+                                <div class="function-name">makcu_catch_mouse_side2</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_catch_mouse_side2(makcu_device_t* device, uint8_t* result);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">result</span> <span class="param-type">uint8_t*</span> - Output pointer for input result</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Captures and intercepts side button 2 input before it reaches the system.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-enable-button-monitoring">
+                            <td>
+                                <div class="function-name">makcu_enable_button_monitoring</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_enable_button_monitoring(makcu_device_t* device, bool enable);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">enable</span> <span class="param-type">bool</span> - Enable or disable monitoring</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Enables or disables continuous monitoring of mouse button states.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-is-button-monitoring-enabled">
+                            <td>
+                                <div class="function-name">makcu_is_button_monitoring_enabled</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_is_button_monitoring_enabled(makcu_device_t* device, bool* enabled);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">enabled</span> <span class="param-type">bool*</span> - Output pointer for monitoring state</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Queries whether button monitoring is currently enabled.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-get-button-mask">
+                            <td>
+                                <div class="function-name">makcu_get_button_mask</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_get_button_mask(makcu_device_t* device, uint8_t* mask);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">mask</span> <span class="param-type">uint8_t*</span> - Output pointer for button mask</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Gets a bitmask representing the state of all mouse buttons.</div>
                             </td>
                         </tr>
                         <tr data-api="c" data-function="makcu-enable-high-performance-mode">
@@ -2265,6 +2825,622 @@
                             </td>
                             <td>
                                 <div class="function-description">Get performance statistics including command names, call counts, and total execution times.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-send-raw-command">
+                            <td>
+                                <div class="function-name">makcu_send_raw_command</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_send_raw_command(makcu_device_t* device, const char* command);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">command</span> <span class="param-type">const char*</span> - Raw command string to send</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Sends a raw command directly to the device without any processing or validation.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-receive-raw-response">
+                            <td>
+                                <div class="function-name">makcu_receive_raw_response</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_receive_raw_response(makcu_device_t* device, char* response, size_t response_size);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                    <div class="parameter"><span class="param-name">response</span> <span class="param-type">char*</span> - Buffer for response data</div>
+                                    <div class="parameter"><span class="param-name">response_size</span> <span class="param-type">size_t</span> - Buffer size</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Receives raw response data from the device without any processing or validation.</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="api-section" id="batch-operations" data-category="batch">
+                <h2 class="section-title">Batch Operations</h2>
+                <p class="section-description">Command batching for maximum performance. Group multiple operations together to reduce communication overhead and increase throughput.</p>
+                
+                <table class="function-table">
+                    <thead>
+                        <tr>
+                            <th>Function</th>
+                            <th>Signature & Parameters</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- C++ Batch Operations -->
+                        <tr data-api="cpp" data-function="create-batch">
+                            <td>
+                                <div class="function-name">createBatch</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">BatchCommandBuilder createBatch();</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">BatchCommandBuilder</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Creates a batch command builder for grouping multiple operations. Maximizes performance by reducing communication overhead.</div>
+                            </td>
+                        </tr>
+                        
+                        <!-- BatchCommandBuilder Methods -->
+                        <tr data-api="cpp" data-function="batch-move">
+                            <td>
+                                <div class="function-name">BatchCommandBuilder::move</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">BatchCommandBuilder&amp; move(int32_t x, int32_t y);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">x, y</span> <span class="param-type">int32_t</span> - Movement offset</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">BatchCommandBuilder&amp; (for chaining)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Add mouse movement command to batch. Returns self for method chaining.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="batch-move-smooth">
+                            <td>
+                                <div class="function-name">BatchCommandBuilder::moveSmooth</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">BatchCommandBuilder&amp; moveSmooth(int32_t x, int32_t y, uint32_t segments = 10);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">x, y</span> <span class="param-type">int32_t</span> - Movement offset</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Smoothing segments (default: 10)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">BatchCommandBuilder&amp; (for chaining)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Add smooth mouse movement command to batch. Returns self for method chaining.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="batch-move-bezier">
+                            <td>
+                                <div class="function-name">BatchCommandBuilder::moveBezier</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">BatchCommandBuilder&amp; moveBezier(int32_t x, int32_t y, uint32_t segments = 20, int32_t ctrl_x = 0, int32_t ctrl_y = 0);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">x, y</span> <span class="param-type">int32_t</span> - Movement offset</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Curve segments (default: 20)</div>
+                                    <div class="parameter"><span class="param-name">ctrl_x, ctrl_y</span> <span class="param-type">int32_t</span> - Control point (default: 0, 0)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">BatchCommandBuilder&amp; (for chaining)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Add Bezier curve movement command to batch. Returns self for method chaining.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="batch-click">
+                            <td>
+                                <div class="function-name">BatchCommandBuilder::click</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">BatchCommandBuilder&amp; click(MouseButton button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">MouseButton</span> - Button to click</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">BatchCommandBuilder&amp; (for chaining)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Add mouse click command to batch. Returns self for method chaining.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="batch-press">
+                            <td>
+                                <div class="function-name">BatchCommandBuilder::press</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">BatchCommandBuilder&amp; press(MouseButton button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">MouseButton</span> - Button to press</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">BatchCommandBuilder&amp; (for chaining)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Add mouse button press command to batch. Returns self for method chaining.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="batch-release">
+                            <td>
+                                <div class="function-name">BatchCommandBuilder::release</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">BatchCommandBuilder&amp; release(MouseButton button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">MouseButton</span> - Button to release</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">BatchCommandBuilder&amp; (for chaining)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Add mouse button release command to batch. Returns self for method chaining.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="batch-scroll">
+                            <td>
+                                <div class="function-name">BatchCommandBuilder::scroll</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">BatchCommandBuilder&amp; scroll(int32_t delta);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">delta</span> <span class="param-type">int32_t</span> - Scroll amount</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">BatchCommandBuilder&amp; (for chaining)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Add mouse wheel scroll command to batch. Returns self for method chaining.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="batch-drag">
+                            <td>
+                                <div class="function-name">BatchCommandBuilder::drag</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">BatchCommandBuilder&amp; drag(MouseButton button, int32_t x, int32_t y);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">MouseButton</span> - Button to drag with</div>
+                                    <div class="parameter"><span class="param-name">x, y</span> <span class="param-type">int32_t</span> - Drag offset</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">BatchCommandBuilder&amp; (for chaining)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Add mouse drag command to batch. Returns self for method chaining.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="batch-drag-smooth">
+                            <td>
+                                <div class="function-name">BatchCommandBuilder::dragSmooth</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">BatchCommandBuilder&amp; dragSmooth(MouseButton button, int32_t x, int32_t y, uint32_t segments = 10);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">MouseButton</span> - Button to drag with</div>
+                                    <div class="parameter"><span class="param-name">x, y</span> <span class="param-type">int32_t</span> - Drag offset</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Smoothing segments (default: 10)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">BatchCommandBuilder&amp; (for chaining)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Add smooth mouse drag command to batch. Returns self for method chaining.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="batch-drag-bezier">
+                            <td>
+                                <div class="function-name">BatchCommandBuilder::dragBezier</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">BatchCommandBuilder&amp; dragBezier(MouseButton button, int32_t x, int32_t y, uint32_t segments = 20, int32_t ctrl_x = 0, int32_t ctrl_y = 0);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">MouseButton</span> - Button to drag with</div>
+                                    <div class="parameter"><span class="param-name">x, y</span> <span class="param-type">int32_t</span> - Drag offset</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Curve segments (default: 20)</div>
+                                    <div class="parameter"><span class="param-name">ctrl_x, ctrl_y</span> <span class="param-type">int32_t</span> - Control point (default: 0, 0)</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">BatchCommandBuilder&amp; (for chaining)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Add Bezier curve drag command to batch. Returns self for method chaining.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="batch-execute">
+                            <td>
+                                <div class="function-name">BatchCommandBuilder::execute</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool execute();</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool (true on success)</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Execute all commands in the batch sequentially with optimal performance.</div>
+                            </td>
+                        </tr>
+
+                        <!-- C API Batch Operations -->
+                        <tr data-api="c" data-function="makcu-create-batch">
+                            <td>
+                                <div class="function-name">makcu_create_batch</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_batch_builder_t* makcu_create_batch(makcu_device_t* device);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">device</span> <span class="param-type">makcu_device_t*</span> - Device instance</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_batch_builder_t* or NULL</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Create a batch command builder for grouping operations. Must be destroyed with makcu_batch_destroy().</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-destroy">
+                            <td>
+                                <div class="function-name">makcu_batch_destroy</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">void makcu_batch_destroy(makcu_batch_builder_t* batch);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch builder to destroy</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Destroy a batch command builder and free resources.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-move">
+                            <td>
+                                <div class="function-name">makcu_batch_move</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_batch_move(makcu_batch_builder_t* batch, int32_t x, int32_t y);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch builder instance</div>
+                                    <div class="parameter"><span class="param-name">x</span> <span class="param-type">int32_t</span> - X coordinate</div>
+                                    <div class="parameter"><span class="param-name">y</span> <span class="param-type">int32_t</span> - Y coordinate</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Adds a mouse move command to the batch.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-move-smooth">
+                            <td>
+                                <div class="function-name">makcu_batch_move_smooth</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_batch_move_smooth(makcu_batch_builder_t* batch, int32_t x, int32_t y, uint32_t segments);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch builder instance</div>
+                                    <div class="parameter"><span class="param-name">x</span> <span class="param-type">int32_t</span> - X coordinate</div>
+                                    <div class="parameter"><span class="param-name">y</span> <span class="param-type">int32_t</span> - Y coordinate</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Number of segments</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Adds a smooth mouse move command to the batch.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-move-bezier">
+                            <td>
+                                <div class="function-name">makcu_batch_move_bezier</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_batch_move_bezier(makcu_batch_builder_t* batch, int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x, int32_t ctrl_y);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch builder instance</div>
+                                    <div class="parameter"><span class="param-name">x</span> <span class="param-type">int32_t</span> - X coordinate</div>
+                                    <div class="parameter"><span class="param-name">y</span> <span class="param-type">int32_t</span> - Y coordinate</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Number of curve segments</div>
+                                    <div class="parameter"><span class="param-name">ctrl_x</span> <span class="param-type">int32_t</span> - Control point X</div>
+                                    <div class="parameter"><span class="param-name">ctrl_y</span> <span class="param-type">int32_t</span> - Control point Y</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Adds a Bezier curve mouse move command to the batch.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-click">
+                            <td>
+                                <div class="function-name">makcu_batch_click</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_batch_click(makcu_batch_builder_t* batch, makcu_mouse_button_t button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch builder instance</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to click</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Adds a mouse click command to the batch.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-press">
+                            <td>
+                                <div class="function-name">makcu_batch_press</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_batch_press(makcu_batch_builder_t* batch, makcu_mouse_button_t button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch builder instance</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to press</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Adds a mouse button press command to the batch.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-release">
+                            <td>
+                                <div class="function-name">makcu_batch_release</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_batch_release(makcu_batch_builder_t* batch, makcu_mouse_button_t button);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch builder instance</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to release</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Adds a mouse button release command to the batch.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-scroll">
+                            <td>
+                                <div class="function-name">makcu_batch_scroll</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_batch_scroll(makcu_batch_builder_t* batch, int32_t delta);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch builder instance</div>
+                                    <div class="parameter"><span class="param-name">delta</span> <span class="param-type">int32_t</span> - Scroll amount</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Adds a mouse wheel scroll command to the batch.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-drag">
+                            <td>
+                                <div class="function-name">makcu_batch_drag</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_batch_drag(makcu_batch_builder_t* batch, makcu_mouse_button_t button, int32_t x, int32_t y);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch builder instance</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to drag with</div>
+                                    <div class="parameter"><span class="param-name">x</span> <span class="param-type">int32_t</span> - X coordinate</div>
+                                    <div class="parameter"><span class="param-name">y</span> <span class="param-type">int32_t</span> - Y coordinate</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Adds a mouse drag command to the batch.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-drag-smooth">
+                            <td>
+                                <div class="function-name">makcu_batch_drag_smooth</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_batch_drag_smooth(makcu_batch_builder_t* batch, makcu_mouse_button_t button, int32_t x, int32_t y, uint32_t segments);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch builder instance</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to drag with</div>
+                                    <div class="parameter"><span class="param-name">x</span> <span class="param-type">int32_t</span> - X coordinate</div>
+                                    <div class="parameter"><span class="param-name">y</span> <span class="param-type">int32_t</span> - Y coordinate</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Number of segments</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Adds a smooth mouse drag command to the batch.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-drag-bezier">
+                            <td>
+                                <div class="function-name">makcu_batch_drag_bezier</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_batch_drag_bezier(makcu_batch_builder_t* batch, makcu_mouse_button_t button, int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x, int32_t ctrl_y);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch builder instance</div>
+                                    <div class="parameter"><span class="param-name">button</span> <span class="param-type">makcu_mouse_button_t</span> - Button to drag with</div>
+                                    <div class="parameter"><span class="param-name">x</span> <span class="param-type">int32_t</span> - X coordinate</div>
+                                    <div class="parameter"><span class="param-name">y</span> <span class="param-type">int32_t</span> - Y coordinate</div>
+                                    <div class="parameter"><span class="param-name">segments</span> <span class="param-type">uint32_t</span> - Number of curve segments</div>
+                                    <div class="parameter"><span class="param-name">ctrl_x</span> <span class="param-type">int32_t</span> - Control point X</div>
+                                    <div class="parameter"><span class="param-name">ctrl_y</span> <span class="param-type">int32_t</span> - Control point Y</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Adds a Bezier curve mouse drag command to the batch.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="c" data-function="makcu-batch-execute">
+                            <td>
+                                <div class="function-name">makcu_batch_execute</div>
+                                <span class="api-type c">C API</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">makcu_error_t makcu_batch_execute(makcu_batch_builder_t* batch);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">batch</span> <span class="param-type">makcu_batch_builder_t*</span> - Batch to execute</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">makcu_error_t</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Execute all commands in the batch sequentially.</div>
                             </td>
                         </tr>
                     </tbody>
