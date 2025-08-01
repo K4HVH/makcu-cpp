@@ -32,28 +32,258 @@
             line-height: 1.6;
             color: var(--text-color);
             background-color: var(--background-color);
+            display: flex;
+            min-height: 100vh;
         }
 
-        .header {
+        /* Old header styles removed - now using sidebar-header */
+
+        /* Sidebar Styles */
+        .sidebar {
+            width: 320px;
+            background: var(--surface-color);
+            border-right: 1px solid var(--border-color);
+            position: fixed;
+            left: 0;
+            top: 0;
+            height: 100vh;
+            overflow: hidden;
+            z-index: 1000;
+            box-shadow: 2px 0 4px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
             background: linear-gradient(135deg, var(--header-bg), var(--primary-color));
             color: white;
-            padding: 2rem 0;
+            padding: 1.5rem;
             text-align: center;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         }
 
-        .header h1 {
-            font-size: 2.5rem;
+        .sidebar-header h1 {
+            font-size: 1.5rem;
             font-weight: 700;
             margin-bottom: 0.5rem;
         }
 
-        .header p {
-            font-size: 1.1rem;
+        .sidebar-header p {
+            font-size: 0.875rem;
             opacity: 0.9;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 0 1rem;
+            line-height: 1.4;
+        }
+
+        .sidebar-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-top {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .sidebar-search {
+            margin-bottom: 1.5rem;
+        }
+
+        .sidebar-search h3 {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.75rem;
+        }
+
+        .sidebar-search input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 0.875rem;
+            background: var(--background-color);
+            color: var(--text-color);
+            transition: border-color 0.2s;
+            margin-bottom: 1rem;
+        }
+
+        .sidebar-search input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .sidebar-filters {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .sidebar-filters .filter-btn {
+            flex: 1;
+            min-width: 0;
+            font-size: 0.75rem;
+            padding: 0.5rem 0.75rem;
+        }
+
+        .sidebar-stats {
+            background: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .sidebar-stats h3 {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+        }
+
+        .sidebar-stat {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .sidebar-stat:last-child {
+            border-bottom: none;
+        }
+
+        .sidebar-stat-label {
+            font-size: 0.875rem;
+            color: var(--text-color);
+        }
+
+        .sidebar-stat-number {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        /* Table of Contents */
+        .sidebar-toc {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+        }
+
+        /* Custom scrollbar styling */
+        .sidebar-toc::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .sidebar-toc::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar-toc::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.2);
+            border-radius: 2px;
+        }
+
+        .sidebar-toc::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.4);
+        }
+
+        /* Firefox scrollbar */
+        .sidebar-toc {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
+        }
+
+        .sidebar-toc h3 {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 0;
+            padding: 1rem 1.5rem 0.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .toc-section {
+            margin-bottom: 0.5rem;
+        }
+
+        .toc-section-header {
+            padding: 0.75rem 1.5rem;
+            background: var(--background-color);
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background-color 0.2s;
+        }
+
+        .toc-section-header:hover {
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .toc-section-toggle {
+            font-size: 0.75rem;
+            transition: transform 0.2s;
+        }
+
+        .toc-section-header.collapsed .toc-section-toggle {
+            transform: rotate(-90deg);
+        }
+
+        .toc-functions {
+            max-height: 300px;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .toc-functions.collapsed {
+            max-height: 0;
+        }
+
+        .toc-function {
+            padding: 0.4rem 2rem;
+            font-size: 0.75rem;
+            color: var(--text-color);
+            cursor: pointer;
+            border-left: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .toc-function:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-left-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .toc-function.cpp {
+            border-right: 3px solid #06b6d4;
+        }
+
+        .toc-function.c {
+            border-right: 3px solid #10b981;
+        }
+
+        .toc-count {
+            font-size: 0.625rem;
+            color: var(--text-secondary);
+            font-weight: normal;
+        }
+
+        /* Main content adjustments */
+        .main-wrapper {
+            flex: 1;
+            margin-left: 320px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
         .container {
@@ -62,44 +292,7 @@
             padding: 0 1rem;
         }
 
-        .search-container {
-            background: var(--surface-color);
-            padding: 1.5rem 0;
-            border-bottom: 1px solid var(--border-color);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .search-box {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        #searchInput {
-            flex: 1;
-            padding: 0.75rem 1rem;
-            border: 2px solid var(--border-color);
-            border-radius: 8px;
-            font-size: 1rem;
-            background: var(--background-color);
-            color: var(--text-color);
-            transition: border-color 0.2s;
-        }
-
-        #searchInput:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-        }
-
-        .search-filters {
-            display: flex;
-            gap: 0.5rem;
-        }
+        /* Old search container styles removed - now using sidebar-search */
 
         .filter-btn {
             padding: 0.5rem 1rem;
@@ -124,7 +317,9 @@
         }
 
         .main-content {
+            flex: 1;
             padding: 2rem 0;
+            overflow-x: auto;
         }
 
         .api-section {
@@ -304,34 +499,7 @@
             font-size: 1.1rem;
         }
 
-        .stats {
-            display: flex;
-            justify-content: center;
-            gap: 2rem;
-            margin-bottom: 2rem;
-            padding: 1rem;
-            background: var(--surface-color);
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-        }
-
-        .stat {
-            text-align: center;
-        }
-
-        .stat-number {
-            display: block;
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--primary-color);
-        }
-
-        .stat-label {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
+        /* Old stats styles removed - now using sidebar-stats */
 
         .footer {
             background: var(--surface-color);
@@ -349,24 +517,56 @@
             border-radius: 2px;
         }
 
+        @media (max-width: 1024px) {
+            .sidebar {
+                width: 280px;
+            }
+            
+            .main-wrapper {
+                margin-left: 280px;
+            }
+        }
+
         @media (max-width: 768px) {
-            .header h1 {
-                font-size: 2rem;
-            }
-            
-            .search-box {
+            body {
                 flex-direction: column;
-                align-items: stretch;
             }
             
-            .search-filters {
-                justify-content: center;
-                flex-wrap: wrap;
+            .sidebar {
+                width: 100%;
+                height: 50vh;
+                position: relative;
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
             }
             
-            .stats {
-                flex-direction: column;
-                gap: 1rem;
+            .sidebar-header h1 {
+                font-size: 1.25rem;
+            }
+            
+            .sidebar-header p {
+                font-size: 0.8rem;
+            }
+            
+            .sidebar-top {
+                padding: 1rem;
+            }
+            
+            .sidebar-toc h3 {
+                padding: 0.75rem 1rem 0.25rem;
+            }
+            
+            .toc-section-header {
+                padding: 0.5rem 1rem;
+            }
+            
+            .toc-function {
+                padding: 0.3rem 1.5rem;
+            }
+            
+            .main-wrapper {
+                margin-left: 0;
+                flex: 1;
             }
             
             .function-table {
@@ -381,42 +581,54 @@
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
             <h1>MAKCU C++ Library</h1>
             <p>High-performance mouse controller library with C++ and C APIs for sub-millisecond response times</p>
         </div>
-    </header>
-
-    <div class="search-container">
-        <div class="container">
-            <div class="search-box">
-                <input type="text" id="searchInput" placeholder="Search functions, parameters, or descriptions...">
-                <div class="search-filters">
-                    <button class="filter-btn active" data-filter="all">All</button>
-                    <button class="filter-btn" data-filter="cpp">C++</button>
-                    <button class="filter-btn" data-filter="c">C API</button>
+        
+        <div class="sidebar-content">
+            <div class="sidebar-top">
+                <div class="sidebar-search">
+                    <h3>Search & Filter</h3>
+                    <input type="text" id="searchInput" placeholder="Search functions, parameters, or descriptions...">
+                    <div class="sidebar-filters">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="cpp">C++</button>
+                        <button class="filter-btn" data-filter="c">C API</button>
+                    </div>
+                </div>
+                
+                <div class="sidebar-stats">
+                    <h3>API Statistics</h3>
+                    <div class="sidebar-stat">
+                        <span class="sidebar-stat-label">Total Functions</span>
+                        <span class="sidebar-stat-number" id="totalFunctions">0</span>
+                    </div>
+                    <div class="sidebar-stat">
+                        <span class="sidebar-stat-label">C++ Functions</span>
+                        <span class="sidebar-stat-number" id="cppFunctions">0</span>
+                    </div>
+                    <div class="sidebar-stat">
+                        <span class="sidebar-stat-label">C Functions</span>
+                        <span class="sidebar-stat-number" id="cFunctions">0</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sidebar-toc">
+                <div id="tocContainer">
+                    <!-- Table of contents will be populated by JavaScript -->
                 </div>
             </div>
         </div>
     </div>
 
-    <main class="main-content">
-        <div class="container">
-            <div class="stats">
-                <div class="stat">
-                    <span class="stat-number" id="totalFunctions">0</span>
-                    <span class="stat-label">Total Functions</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-number" id="cppFunctions">0</span>
-                    <span class="stat-label">C++ Functions</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-number" id="cFunctions">0</span>
-                    <span class="stat-label">C Functions</span>
-                </div>
-            </div>
+    <!-- Main content wrapper -->
+    <div class="main-wrapper">
+        <main class="main-content">
+            <div class="container">
 
             <!-- Device Management -->
             <section class="api-section">
@@ -3450,15 +3662,16 @@
             <div class="no-results" id="noResults" style="display: none;">
                 <p>No functions found matching your search criteria.</p>
             </div>
-        </div>
-    </main>
+            </div>
+        </main>
 
-    <footer class="footer">
-        <div class="container">
-            <p>MAKCU C++ Library API Reference - High-performance mouse controller with sub-millisecond response times</p>
-            <p>Generated from source code analysis • VID:PID 1A86:55D3 • Performance: ~40μs response time</p>
-        </div>
-    </footer>
+        <footer class="footer">
+            <div class="container">
+                <p>MAKCU C++ Library API Reference - High-performance mouse controller with sub-millisecond response times</p>
+                <p>Generated from source code analysis • VID:PID 1A86:55D3 • Performance: ~40μs response time</p>
+            </div>
+        </footer>
+    </div> <!-- End main-wrapper -->
 
     <script>
         // Search and filter functionality
@@ -3468,6 +3681,7 @@
             const functionRows = document.querySelectorAll('.function-table tbody tr');
             const noResults = document.getElementById('noResults');
             const apiSections = document.querySelectorAll('.api-section');
+            const tocContainer = document.getElementById('tocContainer');
             
             let currentFilter = 'all';
             let currentSearch = '';
@@ -3489,6 +3703,120 @@
                 document.getElementById('lockingCount').textContent = document.querySelectorAll('[data-category="locking"] tbody tr').length;
                 document.getElementById('infoCount').textContent = document.querySelectorAll('[data-category="info"] tbody tr').length;
                 document.getElementById('advancedCount').textContent = document.querySelectorAll('[data-category="advanced"] tbody tr').length;
+            }
+
+            // Update Table of Contents
+            function updateTableOfContents() {
+                const sections = [];
+                
+                apiSections.forEach(section => {
+                    const sectionHeader = section.querySelector('.section-title');
+                    if (!sectionHeader) return;
+                    
+                    const sectionTitle = sectionHeader.textContent;
+                    const sectionId = section.id || sectionTitle.toLowerCase().replace(/\s+/g, '-');
+                    const visibleFunctions = [];
+                    
+                    // Get all visible function rows in this section
+                    const functionTable = section.querySelector('.function-table tbody');
+                    if (functionTable) {
+                        const rows = functionTable.querySelectorAll('tr');
+                        rows.forEach(row => {
+                            if (row.style.display !== 'none') {
+                                const functionName = row.querySelector('.function-name').textContent;
+                                const apiType = row.dataset.api;
+                                const functionElement = row.querySelector('.function-name');
+                                
+                                visibleFunctions.push({
+                                    name: functionName,
+                                    apiType: apiType,
+                                    element: functionElement
+                                });
+                            }
+                        });
+                    }
+                    
+                    if (visibleFunctions.length > 0) {
+                        sections.push({
+                            title: sectionTitle,
+                            id: sectionId,
+                            functions: visibleFunctions,
+                            element: section
+                        });
+                    }
+                });
+                
+                // Generate TOC HTML
+                let tocHTML = '';
+                sections.forEach(section => {
+                    tocHTML += `
+                        <div class="toc-section">
+                            <div class="toc-section-header" data-section="${section.id}">
+                                <span>${section.title} <span class="toc-count">(${section.functions.length})</span></span>
+                                <span class="toc-section-toggle">▼</span>
+                            </div>
+                            <div class="toc-functions">`;
+                    
+                    section.functions.forEach(func => {
+                        tocHTML += `
+                            <div class="toc-function ${func.apiType}" data-function="${func.name}">
+                                ${func.name}
+                            </div>`;
+                    });
+                    
+                    tocHTML += `
+                            </div>
+                        </div>`;
+                });
+                
+                tocContainer.innerHTML = tocHTML;
+                
+                // Add click handlers for TOC navigation
+                addTocClickHandlers();
+            }
+
+            // Add click handlers for TOC navigation
+            function addTocClickHandlers() {
+                // Section header click handlers (toggle collapse)
+                tocContainer.querySelectorAll('.toc-section-header').forEach(header => {
+                    header.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const functionsDiv = this.nextElementSibling;
+                        const isCollapsed = functionsDiv.classList.contains('collapsed');
+                        
+                        if (isCollapsed) {
+                            functionsDiv.classList.remove('collapsed');
+                            this.classList.remove('collapsed');
+                        } else {
+                            functionsDiv.classList.add('collapsed');
+                            this.classList.add('collapsed');
+                        }
+                    });
+                });
+                
+                // Function click handlers (scroll to function)
+                tocContainer.querySelectorAll('.toc-function').forEach(funcEl => {
+                    funcEl.addEventListener('click', function() {
+                        const functionName = this.dataset.function;
+                        const targetElement = document.querySelector(`[data-function*="${functionName}"] .function-name`);
+                        
+                        if (targetElement) {
+                            targetElement.scrollIntoView({ 
+                                behavior: 'smooth', 
+                                block: 'center' 
+                            });
+                            
+                            // Highlight the target briefly
+                            const row = targetElement.closest('tr');
+                            if (row) {
+                                row.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
+                                setTimeout(() => {
+                                    row.style.backgroundColor = '';
+                                }, 2000);
+                            }
+                        }
+                    });
+                });
             }
 
             // Filter and search functions
@@ -3539,6 +3867,9 @@
                 } else {
                     noResults.style.display = 'none';
                 }
+                
+                // Update table of contents
+                updateTableOfContents();
             }
 
             // Search input handler
@@ -3559,6 +3890,7 @@
 
             // Initialize
             updateStats();
+            updateTableOfContents();
             filterAndSearch();
 
             // Keyboard shortcuts
