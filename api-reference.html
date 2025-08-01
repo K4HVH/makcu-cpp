@@ -3798,7 +3798,10 @@
                 tocContainer.querySelectorAll('.toc-function').forEach(funcEl => {
                     funcEl.addEventListener('click', function() {
                         const functionName = this.dataset.function;
-                        const targetElement = document.querySelector(`[data-function*="${functionName}"] .function-name`);
+                        // Find the function by matching the text content of .function-name elements
+                        const targetElement = Array.from(document.querySelectorAll('.function-name')).find(el => 
+                            el.textContent.trim() === functionName.trim()
+                        );
                         
                         if (targetElement) {
                             targetElement.scrollIntoView({ 
@@ -3806,13 +3809,31 @@
                                 block: 'center' 
                             });
                             
-                            // Highlight the target briefly
+                            // Clear any existing highlights first
+                            document.querySelectorAll('.highlighted-row').forEach(row => {
+                                row.classList.remove('highlighted-row');
+                                row.style.backgroundColor = '';
+                            });
+                            
+                            // Highlight the target with animation
                             const row = targetElement.closest('tr');
                             if (row) {
-                                row.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
+                                row.classList.add('highlighted-row');
+                                row.style.transition = 'background-color 0.3s ease-in-out';
+                                row.style.backgroundColor = 'rgba(59, 130, 246, 0.3)';
+                                
                                 setTimeout(() => {
+                                    row.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+                                }, 300);
+                                
+                                setTimeout(() => {
+                                    row.style.transition = 'background-color 0.8s ease-out';
                                     row.style.backgroundColor = '';
-                                }, 2000);
+                                    setTimeout(() => {
+                                        row.classList.remove('highlighted-row');
+                                        row.style.transition = '';
+                                    }, 800);
+                                }, 1500);
                             }
                         }
                     });
