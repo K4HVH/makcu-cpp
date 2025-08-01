@@ -1091,6 +1091,48 @@
                                 <div class="function-description">Sets a callback function to be called when connection state changes.</div>
                             </td>
                         </tr>
+                        <tr data-api="cpp" data-function="setMouseButtonCallback">
+                            <td>
+                                <div class="function-name">setMouseButtonCallback</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">void setMouseButtonCallback(MouseButtonCallback callback);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">callback</span> <span class="param-type">MouseButtonCallback</span> - Callback function for mouse button events</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">void</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Sets a callback function to be called when mouse button events occur. The callback receives the button type and press/release state.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="setConnectionCallback">
+                            <td>
+                                <div class="function-name">setConnectionCallback</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">void setConnectionCallback(ConnectionCallback callback);</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">callback</span> <span class="param-type">ConnectionCallback</span> - Callback function for connection state changes</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">void</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Sets a callback function to be called when the device connection state changes. The callback receives a boolean indicating connection status.</div>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </section>
@@ -2531,6 +2573,24 @@
                                 <div class="function-description">Enables fire-and-forget mode for gaming. Disables response waiting for maximum speed (~28x faster than Python).</div>
                             </td>
                         </tr>
+                        <tr data-api="cpp" data-function="isHighPerformanceModeEnabled">
+                            <td>
+                                <div class="function-name">isHighPerformanceModeEnabled</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type software">Software</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool isHighPerformanceModeEnabled() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool</div>
+                                    <div class="return-description">True if high performance mode is enabled</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Checks if high performance mode is currently enabled. Returns the current state of fire-and-forget mode.</div>
+                            </td>
+                        </tr>
                         <tr data-api="cpp" data-function="click-sequence">
                             <td>
                                 <div class="function-name">clickSequence</div>
@@ -2714,6 +2774,46 @@
                             </td>
                             <td>
                                 <div class="function-description">Reset device serial number to factory default.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="sendRawCommand">
+                            <td>
+                                <div class="function-name">sendRawCommand</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">bool sendRawCommand(const std::string& command) const;</div>
+                                <div class="parameters">
+                                    <div class="parameters-title">Parameters:</div>
+                                    <div class="parameter"><span class="param-name">command</span> <span class="param-type">const std::string&</span> - Raw command string to send</div>
+                                </div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">bool</div>
+                                    <div class="return-description">True if command was sent successfully</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Sends a raw command directly to the device without any processing or validation. For advanced users only.</div>
+                            </td>
+                        </tr>
+                        <tr data-api="cpp" data-function="receiveRawResponse">
+                            <td>
+                                <div class="function-name">receiveRawResponse</div>
+                                <span class="api-type cpp">C++</span>
+                                <span class="api-type native">Native</span>
+                            </td>
+                            <td>
+                                <div class="function-signature">std::string receiveRawResponse() const;</div>
+                                <div class="return-info">
+                                    <div class="return-title">Returns:</div>
+                                    <div class="return-type">std::string</div>
+                                    <div class="return-description">Raw response data from device</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="function-description">Receives raw response data from the device without any processing or validation. For advanced users only.</div>
                             </td>
                         </tr>
                         
