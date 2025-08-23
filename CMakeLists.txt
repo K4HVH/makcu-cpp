@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(makcu-cpp VERSION 1.3.2 LANGUAGES CXX)
+project(makcu-cpp VERSION 1.3.3 LANGUAGES CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -36,12 +36,16 @@ set(LIBRARY_SOURCES
     makcu-cpp/src/makcu_c.cpp
 )
 
-# Headers
-set(HEADERS
+# Public headers (for distribution)
+set(PUBLIC_HEADERS
     makcu-cpp/include/makcu.h
-    makcu-cpp/include/serialport.h
-    makcu-cpp/include/makcu_export.h
     makcu-cpp/include/makcu_c.h
+)
+
+# All headers (including internal ones for build)
+set(HEADERS
+    ${PUBLIC_HEADERS}
+    makcu-cpp/include/serialport.h
 )
 
 # Create both shared and static libraries by default
@@ -54,7 +58,7 @@ if(NOT BUILD_STATIC_ONLY)
         OUTPUT_NAME ${PROJECT_NAME}
         VERSION ${PROJECT_VERSION}
         SOVERSION 1
-        PUBLIC_HEADER "${HEADERS}"
+        PUBLIC_HEADER "${PUBLIC_HEADERS}"
     )
     list(APPEND LIBRARY_TARGETS ${PROJECT_NAME}_shared)
 endif()
@@ -65,7 +69,7 @@ if(NOT BUILD_SHARED_ONLY)
     set_target_properties(${PROJECT_NAME}_static PROPERTIES
         OUTPUT_NAME ${PROJECT_NAME}
         VERSION ${PROJECT_VERSION}
-        PUBLIC_HEADER "${HEADERS}"
+        PUBLIC_HEADER "${PUBLIC_HEADERS}"
     )
     list(APPEND LIBRARY_TARGETS ${PROJECT_NAME}_static)
 endif()

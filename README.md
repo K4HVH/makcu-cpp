@@ -49,7 +49,7 @@ device.click(makcu::MouseButton::LEFT);
 The library includes a complete C ABI for easy integration with Python, Rust, Go, C#, and other languages:
 
 ```c
-#include <makcu/makcu_c.h>
+#include <makcu/makcu.h>
 
 makcu_device_t* device = makcu_device_create();
 makcu_connect(device, "");
