@@ -1,3 +1,6 @@
+Fork Notice / Minor Fix
+This fork fixes a bug where SIDE1 + RIGHT button presses were incorrectly detected as line feed (LF). Only this small parsing change is included; all original library credit goes to K4HVH.
+
 # MAKCU C++ Library
 
 High-performance C++ library for MAKCU mouse controllers. Sub-millisecond response times, cross-platform support with C ABI for multi-language integration.
