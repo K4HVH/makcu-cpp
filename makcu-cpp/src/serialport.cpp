@@ -92,14 +92,14 @@ namespace makcu {
 
         // Stop listener thread first
         m_stopListener.store(true, std::memory_order_release);
-        
+
         // Wait for listener thread to finish with timeout protection
         if (m_listenerThread.joinable()) {
             // Use a timeout to prevent indefinite blocking
             auto future = std::async(std::launch::async, [this]() {
                 m_listenerThread.join();
-            });
-            
+                });
+
             if (future.wait_for(std::chrono::milliseconds(1000)) == std::future_status::timeout) {
                 // Thread didn't exit cleanly - this is a serious issue but we must continue cleanup
                 // The thread will be destroyed when the object is destroyed
@@ -118,7 +118,7 @@ namespace makcu {
             }
             m_pendingCommands.clear();
         }
-        
+
         // Second pass: cancel commands outside of mutex to prevent deadlock
         for (auto& cmd : commandsToCancel) {
             try {
@@ -133,7 +133,7 @@ namespace makcu {
         // Platform-specific cleanup
         platformClose();
         m_isOpen.store(false, std::memory_order_release);
-        
+
         // Reset button state
         m_lastButtonMask.store(0, std::memory_order_release);
     }
@@ -152,7 +152,7 @@ namespace makcu {
         if (m_handle == INVALID_HANDLE_VALUE) {
             return false;
         }
-        
+
         // Try to get comm state to verify device is still there
         DCB dcb;
         return GetCommState(m_handle, &dcb) != 0;
@@ -161,24 +161,24 @@ namespace makcu {
         if (m_fd < 0) {
             return false;
         }
-        
+
         // Use poll to check if device is still connected
         struct pollfd pfd;
         pfd.fd = m_fd;
         pfd.events = POLLERR | POLLHUP | POLLNVAL;
         pfd.revents = 0;
-        
+
         int result = poll(&pfd, 1, 0);  // Non-blocking check
-        
+
         if (result < 0) {
             return false;  // Error occurred
         }
-        
+
         // If any error conditions are set, device is disconnected
         if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
             return false;
         }
-        
+
         return true;
 #endif
     }
@@ -220,7 +220,7 @@ namespace makcu {
 
         // Unified write operation
         ssize_t bytesWritten = platformWrite(trackedCommand.c_str(), trackedCommand.length());
-        
+
         if (bytesWritten != static_cast<ssize_t>(trackedCommand.length())) {
             std::lock_guard<std::mutex> lock(m_commandMutex);
             auto it = m_pendingCommands.find(cmdId);
@@ -229,9 +229,10 @@ namespace makcu {
                     std::string errorMsg = "Write failed";
                     if (bytesWritten < 0) {
                         errorMsg += " (" + getLastPlatformError() + ")";
-                    } else {
-                        errorMsg += " (partial write: " + std::to_string(bytesWritten) + 
-                                   "/" + std::to_string(trackedCommand.length()) + " bytes)";
+                    }
+                    else {
+                        errorMsg += " (partial write: " + std::to_string(bytesWritten) +
+                            "/" + std::to_string(trackedCommand.length()) + " bytes)";
                     }
                     it->second->promise.set_exception(std::make_exception_ptr(
                         std::runtime_error(errorMsg)));
@@ -242,7 +243,7 @@ namespace makcu {
                 m_pendingCommands.erase(it);
             }
         }
-        
+
         // Unified flush operation
         platformFlush();
 
@@ -258,9 +259,9 @@ namespace makcu {
         // Command length validation
         constexpr size_t MAX_COMMAND_LENGTH = 512;
         if (command.length() > MAX_COMMAND_LENGTH) {
-            #ifdef DEBUG
+#ifdef DEBUG
             std::cerr << "SerialPort: Command too long (" << command.length() << " > " << MAX_COMMAND_LENGTH << ")" << std::endl;
-            #endif
+#endif
             return false;
         }
 
@@ -296,41 +297,65 @@ namespace makcu {
                 // Unified read operation
                 size_t bytesToRead = std::min<size_t>(bytesAvailable, static_cast<size_t>(BUFFER_SIZE));
                 ssize_t bytesRead = platformRead(readBuffer.data(), bytesToRead);
-                
+
                 if (bytesRead <= 0) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     continue;
                 }
-                
+
+                bool expectButtonMask = false;
+
                 // Shared byte processing logic
                 for (ssize_t i = 0; i < bytesRead; ++i) {
                     uint8_t byte = readBuffer[i];
 
-                    // Handle button data (non-printable characters < 32, except CR/LF)
-                    if (byte < 32 && byte != 0x0D && byte != 0x0A) {
-                        handleButtonData(byte);
+                    // If km. was just seen, and the byte looks like a button mask (<32), handle it
+                    if (expectButtonMask) {
+                        if (byte < 32) {
+                            handleButtonData(byte);
+                        }
+                        expectButtonMask = false;
+                        continue;
                     }
-                    else {
-                        // Handle text response data
-                        if (byte == 0x0A) { // Line feed
-                            if (linePos > 0) {
-                                std::string line(lineBuffer.begin(), lineBuffer.begin() + linePos);
-                                linePos = 0;
-                                if (!line.empty()) {
-                                    processResponse(line);
-                                }
+
+                    // Detect "km."
+                    if (byte == 'k') {
+                        linePos = 0;
+                        lineBuffer[linePos++] = byte;
+                        continue;
+                    }
+
+                    if (linePos == 1 && byte == 'm') {
+                        lineBuffer[linePos++] = byte;
+                        continue;
+                    }
+
+                    if (linePos == 2 && byte == '.') {
+                        expectButtonMask = true;
+                        linePos = 0; // discard prefix
+                        continue;
+                    }
+
+                    // Handle text response data
+                    if (byte == 0x0A) { // Line feed
+                        if (linePos > 0) {
+                            std::string line(lineBuffer.begin(), lineBuffer.begin() + linePos);
+                            linePos = 0;
+                            if (!line.empty()) {
+                                processResponse(line);
                             }
                         }
-                        else if (byte != 0x0D) { // Ignore carriage return
-                            if (linePos < LINE_BUFFER_SIZE - 1) {
-                                lineBuffer[linePos++] = byte;
-                            } else {
-                                // Buffer overflow protection - discard line and reset
-                                #ifdef DEBUG
-                                std::cerr << "SerialPort: Line buffer overflow, discarding data" << std::endl;
-                                #endif
-                                linePos = 0;
-                            }
+                    }
+                    else if (byte != 0x0D) { // Ignore carriage return
+                        if (linePos < LINE_BUFFER_SIZE - 1) {
+                            lineBuffer[linePos++] = byte;
+                        }
+                        else {
+                            // Buffer overflow protection - discard line and reset
+#ifdef DEBUG
+                            std::cerr << "SerialPort: Line buffer overflow, discarding data" << std::endl;
+#endif
+                            linePos = 0;
                         }
                     }
                 }
@@ -346,13 +371,13 @@ namespace makcu {
             catch (const std::exception& e) {
                 // Log specific exception for debugging but continue running
                 // In production, you might want to use a proper logging framework
-                #ifdef DEBUG
+#ifdef DEBUG
                 std::cerr << "SerialPort listener exception: " << e.what() << std::endl;
-                #endif
-                
+#endif
+
                 // Brief pause to prevent tight exception loops
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                
+
                 // Check if port is still open after exception
                 if (!m_isOpen.load(std::memory_order_acquire)) {
                     // Port was closed, exit gracefully
@@ -361,12 +386,12 @@ namespace makcu {
             }
             catch (...) {
                 // Unknown exception - be more cautious
-                #ifdef DEBUG
+#ifdef DEBUG
                 std::cerr << "SerialPort listener unknown exception" << std::endl;
-                #endif
-                
+#endif
+
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                
+
                 // Check if port is still open after unknown exception
                 if (!m_isOpen.load(std::memory_order_acquire)) {
                     // Port was closed, exit gracefully
@@ -490,7 +515,7 @@ namespace makcu {
     bool SerialPort::setBaudRate(uint32_t baudRate) {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_baudRate = baudRate;
-        
+
         if (m_isOpen) {
             // Unified approach - reconfigure port with new baud rate
             return platformConfigurePort();
@@ -674,33 +699,33 @@ namespace makcu {
         if (!udev) {
             return makcuPorts;
         }
-        
+
         struct udev_enumerate* enumerate = udev_enumerate_new(udev);
         udev_enumerate_add_match_subsystem(enumerate, "tty");
         udev_enumerate_scan_devices(enumerate);
-        
+
         struct udev_list_entry* devices = udev_enumerate_get_list_entry(enumerate);
         struct udev_list_entry* entry;
-        
+
         udev_list_entry_foreach(entry, devices) {
             const char* path = udev_list_entry_get_name(entry);
             struct udev_device* dev = udev_device_new_from_syspath(udev, path);
-            
+
             if (dev) {
                 struct udev_device* parent = udev_device_get_parent_with_subsystem_devtype(dev, "usb", "usb_device");
                 if (parent) {
                     const char* idVendor = udev_device_get_sysattr_value(parent, "idVendor");
                     const char* idProduct = udev_device_get_sysattr_value(parent, "idProduct");
-                    
+
                     // Check for MAKCU device (VID:PID = 1A86:55D3)
                     bool isMakcuDevice = false;
-                    
+
                     // Primary check: VID/PID match
-                    if (idVendor && idProduct && 
+                    if (idVendor && idProduct &&
                         strcmp(idVendor, "1a86") == 0 && strcmp(idProduct, "55d3") == 0) {
                         isMakcuDevice = true;
                     }
-                    
+
                     // Backup check: Description strings (like Windows implementation)
                     if (!isMakcuDevice) {
                         const char* product = udev_device_get_sysattr_value(parent, "product");
@@ -712,7 +737,7 @@ namespace makcu {
                             }
                         }
                     }
-                    
+
                     if (isMakcuDevice) {
                         const char* devNode = udev_device_get_devnode(dev);
                         if (devNode) {
@@ -724,7 +749,7 @@ namespace makcu {
                 udev_device_unref(dev);
             }
         }
-        
+
         udev_enumerate_unref(enumerate);
         udev_unref(udev);
 #endif
@@ -804,9 +829,9 @@ namespace makcu {
         if (tcgetattr(m_fd, &m_oldTermios) != 0) {
             return false;
         }
-        
+
         m_newTermios = m_oldTermios;
-        
+
         // Configure serial port settings to match Windows DCB equivalent
         // Control flags - match Windows DCB settings
         m_newTermios.c_cflag &= ~PARENB;    // No parity (DCB.fParity = FALSE)
@@ -815,57 +840,57 @@ namespace makcu {
         m_newTermios.c_cflag |= CS8;        // 8 data bits (DCB.ByteSize = 8)
         m_newTermios.c_cflag &= ~CRTSCTS;   // No hardware flow control (DCB.fRtsControl/fOutxCtsFlow = FALSE)
         m_newTermios.c_cflag |= CREAD | CLOCAL; // Enable receiver, ignore modem lines (DCB.fDtrControl = DISABLE)
-        
+
         // Local flags - raw input processing like Windows binary mode
         m_newTermios.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG); // Raw input (DCB.fBinary = TRUE equivalent)
         m_newTermios.c_lflag &= ~(ECHOK | ECHONL | IEXTEN);      // Additional echo/processing disable
-        
+
         // Output flags - raw output like Windows
         m_newTermios.c_oflag &= ~OPOST;     // Raw output (no post-processing)
         m_newTermios.c_oflag &= ~(ONLCR | OCRNL | ONOCR | ONLRET); // No line ending conversions
-        
+
         // Input flags - match Windows flow control settings
         m_newTermios.c_iflag &= ~(IXON | IXOFF | IXANY); // No software flow control (DCB.fOutX/fInX = FALSE)
         m_newTermios.c_iflag &= ~(INLCR | ICRNL | IGNCR); // No line ending conversion
         m_newTermios.c_iflag &= ~(ISTRIP | INPCK);        // No parity stripping (DCB.fParity = FALSE)
         m_newTermios.c_iflag &= ~(BRKINT | IGNBRK);       // Break handling like Windows
-        
+
         // Set timeouts - gaming-optimized to match Windows (10ms equivalent)
         m_newTermios.c_cc[VMIN] = 0;        // Non-blocking read
         m_newTermios.c_cc[VTIME] = 1;       // 0.1 second timeout (minimum granularity)
-        
+
         // Set baud rate
         speed_t speed;
         switch (m_baudRate) {
-            case 9600:   speed = B9600; break;
-            case 19200:  speed = B19200; break;
-            case 38400:  speed = B38400; break;
-            case 57600:  speed = B57600; break;
-            case 115200: speed = B115200; break;
-            case 230400: speed = B230400; break;
-            case 460800: speed = B460800; break;
-            case 921600: speed = B921600; break;
-            case 1000000: speed = B1000000; break;
-            case 1152000: speed = B1152000; break;
-            case 1500000: speed = B1500000; break;
-            case 2000000: speed = B2000000; break;
-            case 2500000: speed = B2500000; break;
-            case 3000000: speed = B3000000; break;
-            case 3500000: speed = B3500000; break;
-            case 4000000: speed = B4000000; break;
-            default:     speed = B115200; break;
+        case 9600:   speed = B9600; break;
+        case 19200:  speed = B19200; break;
+        case 38400:  speed = B38400; break;
+        case 57600:  speed = B57600; break;
+        case 115200: speed = B115200; break;
+        case 230400: speed = B230400; break;
+        case 460800: speed = B460800; break;
+        case 921600: speed = B921600; break;
+        case 1000000: speed = B1000000; break;
+        case 1152000: speed = B1152000; break;
+        case 1500000: speed = B1500000; break;
+        case 2000000: speed = B2000000; break;
+        case 2500000: speed = B2500000; break;
+        case 3000000: speed = B3000000; break;
+        case 3500000: speed = B3500000; break;
+        case 4000000: speed = B4000000; break;
+        default:     speed = B115200; break;
         }
-        
+
         cfsetispeed(&m_newTermios, speed);
         cfsetospeed(&m_newTermios, speed);
-        
+
         if (tcsetattr(m_fd, TCSANOW, &m_newTermios) != 0) {
             return false;
         }
-        
+
         // Flush any existing data
         tcflush(m_fd, TCIOFLUSH);
-        
+
         return true;
 #endif
     }
