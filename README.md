@@ -1,4 +1,4 @@
-Fork Notice / Minor Fix
+## ⚠️ Fork Notice / Minor Fix
 This fork fixes a bug where SIDE1 + RIGHT button presses were incorrectly detected as line feed (LF). Only this small parsing change is included; all original library credit goes to K4HVH.
 
 For those not wanting to clone the full repo, just replace serialport.cpp in the original library with this version to apply the fix.
