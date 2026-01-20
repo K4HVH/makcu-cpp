@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(makcu-cpp VERSION 1.3.3 LANGUAGES CXX)
+project(makcu-cpp VERSION 1.3.4 LANGUAGES CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
