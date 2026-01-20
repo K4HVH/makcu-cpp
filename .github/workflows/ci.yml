@@ -193,6 +193,10 @@ jobs:
       run: |
         cmake --build build --config Release --parallel
 
+    - name: Install NSIS
+      run: |
+        choco install nsis -y
+
     - name: Create packages
       run: |
         cd build

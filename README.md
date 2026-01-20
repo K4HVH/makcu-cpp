@@ -91,3 +91,4 @@ GNU GPLv3
 
 - [Makcu Discord Server](https://discord.gg/frvh3P4Qeg) community
 - [Makcu Python Library](https://github.com/SleepyTotem/makcu-py-lib) by [SleepyTotem](https://github.com/SleepyTotem)
+- [Joonal Salmi](https://github.com/josal52) for his fix to a long-standing bug
