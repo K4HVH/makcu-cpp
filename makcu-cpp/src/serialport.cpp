@@ -281,6 +281,8 @@ void SerialPort::listenerLoop() {
 	std::vector<uint8_t> readBuffer(BUFFER_SIZE);
 	std::vector<uint8_t> lineBuffer(LINE_BUFFER_SIZE);
 	size_t linePos = 0;
+	// Keep parser state across read() calls so "km." and mask byte can span chunks.
+	bool expectButtonMask = false;
 
 	auto lastCleanup = std::chrono::steady_clock::now();
 	constexpr auto cleanupInterval = std::chrono::milliseconds(50);
@@ -302,8 +304,6 @@ void SerialPort::listenerLoop() {
 				std::this_thread::sleep_for(std::chrono::milliseconds(1));
 				continue;
 			}
-
-			bool expectButtonMask = false;
 
 			// Shared byte processing logic
 			for (ssize_t i = 0; i < bytesRead; ++i) {
