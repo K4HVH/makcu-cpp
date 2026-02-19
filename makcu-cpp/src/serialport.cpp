@@ -532,7 +532,21 @@ std::string SerialPort::getPortName() const {
 }
 
 bool SerialPort::write(const std::vector<uint8_t>& data) {
-	return sendCommand(std::string(data.begin(), data.end()));
+	if (!m_isOpen.load(std::memory_order_acquire)) {
+		return false;
+	}
+
+	if (data.empty()) {
+		return true;
+	}
+
+	// Raw binary write path: do not append CRLF.
+	ssize_t bytesWritten = platformWrite(data.data(), data.size());
+	if (bytesWritten != static_cast<ssize_t>(data.size())) {
+		return false;
+	}
+
+	return platformFlush();
 }
 
 bool SerialPort::write(const std::string& data) {
