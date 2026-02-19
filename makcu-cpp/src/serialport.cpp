@@ -49,41 +49,42 @@ SerialPort::~SerialPort() {
 }
 
 bool SerialPort::open(const std::string& port, uint32_t baudRate) {
-	std::unique_lock<std::mutex> lock(m_mutex);
+	for (;;) {
+		std::unique_lock<std::mutex> lock(m_mutex);
+		if (m_isOpen) {
+			// Avoid re-entrant deadlock by releasing the lock before calling close().
+			lock.unlock();
+			close();
+			continue;
+		}
 
-	if (m_isOpen) {
-		// Avoid re-entrant deadlock by releasing the lock before calling close().
-		lock.unlock();
-		close();
-		lock.lock();
-	}
+		m_portName = port;
+		m_baudRate = baudRate;
 
-	m_portName = port;
-	m_baudRate = baudRate;
-
-	// Unified logic with platform abstraction
+		// Unified logic with platform abstraction
 #ifdef _WIN32
-	std::string devicePath = "\\\\.\\" + port;
+		std::string devicePath = "\\\\.\\" + port;
 #else
-	std::string devicePath = "/dev/" + port;
+		std::string devicePath = "/dev/" + port;
 #endif
 
-	if (!platformOpen(devicePath)) {
-		return false;
+		if (!platformOpen(devicePath)) {
+			return false;
+		}
+
+		if (!platformConfigurePort()) {
+			platformClose();
+			return false;
+		}
+
+		m_isOpen = true;
+
+		// Start high-performance listener thread (shared logic)
+		m_stopListener = false;
+		m_listenerThread = std::thread(&SerialPort::listenerLoop, this);
+
+		return true;
 	}
-
-	if (!platformConfigurePort()) {
-		platformClose();
-		return false;
-	}
-
-	m_isOpen = true;
-
-	// Start high-performance listener thread (shared logic)
-	m_stopListener = false;
-	m_listenerThread = std::thread(&SerialPort::listenerLoop, this);
-
-	return true;
 }
 
 void SerialPort::close() {
