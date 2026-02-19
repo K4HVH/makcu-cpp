@@ -49,10 +49,13 @@ SerialPort::~SerialPort() {
 }
 
 bool SerialPort::open(const std::string& port, uint32_t baudRate) {
-	std::lock_guard<std::mutex> lock(m_mutex);
+	std::unique_lock<std::mutex> lock(m_mutex);
 
 	if (m_isOpen) {
+		// Avoid re-entrant deadlock by releasing the lock before calling close().
+		lock.unlock();
 		close();
+		lock.lock();
 	}
 
 	m_portName = port;
@@ -93,18 +96,9 @@ void SerialPort::close() {
 	// Stop listener thread first
 	m_stopListener.store(true, std::memory_order_release);
 
-	// Wait for listener thread to finish with timeout protection
+	// Wait for listener thread to finish.
 	if (m_listenerThread.joinable()) {
-		// Use a timeout to prevent indefinite blocking
-		auto future = std::async(std::launch::async, [this]() {
-			m_listenerThread.join();
-		});
-
-		if (future.wait_for(std::chrono::milliseconds(1000)) == std::future_status::timeout) {
-			// Thread didn't exit cleanly - this is a serious issue but we must continue cleanup
-			// The thread will be destroyed when the object is destroyed
-			m_listenerThread.detach();
-		}
+		m_listenerThread.join();
 	}
 
 	// Cancel all pending commands with double-checked locking for safety
@@ -117,6 +111,7 @@ void SerialPort::close() {
 			commandsToCancel.push_back(std::move(cmd));
 		}
 		m_pendingCommands.clear();
+		m_pendingCommandOrder.clear();
 	}
 
 	// Second pass: cancel commands outside of mutex to prevent deadlock
@@ -211,6 +206,7 @@ std::future<std::string> SerialPort::sendTrackedCommand(const std::string& comma
 	{
 		std::lock_guard<std::mutex> lock(m_commandMutex);
 		m_pendingCommands[cmdId] = std::move(pendingCmd);
+		m_pendingCommandOrder.push_back(cmdId);
 	}
 
 	// Send command with ID tracking (shared logic)
@@ -241,6 +237,10 @@ std::future<std::string> SerialPort::sendTrackedCommand(const std::string& comma
 				// Promise already set
 			}
 			m_pendingCommands.erase(it);
+			auto orderIt = std::find(m_pendingCommandOrder.begin(), m_pendingCommandOrder.end(), cmdId);
+			if (orderIt != m_pendingCommandOrder.end()) {
+				m_pendingCommandOrder.erase(orderIt);
+			}
 		}
 	}
 
@@ -454,6 +454,10 @@ void SerialPort::processResponse(const std::string& response) {
 						// Promise already set
 					}
 					m_pendingCommands.erase(it);
+					auto orderIt = std::find(m_pendingCommandOrder.begin(), m_pendingCommandOrder.end(), cmdId);
+					if (orderIt != m_pendingCommandOrder.end()) {
+						m_pendingCommandOrder.erase(orderIt);
+					}
 				}
 				return;
 			}
@@ -465,8 +469,13 @@ void SerialPort::processResponse(const std::string& response) {
 
 	// Handle untracked response (oldest pending command)
 	std::lock_guard<std::mutex> lock(m_commandMutex);
-	if (!m_pendingCommands.empty()) {
-		auto it = m_pendingCommands.begin();
+	while (!m_pendingCommandOrder.empty()) {
+		int cmdId = m_pendingCommandOrder.front();
+		m_pendingCommandOrder.pop_front();
+		auto it = m_pendingCommands.find(cmdId);
+		if (it == m_pendingCommands.end()) {
+			continue;
+		}
 		try {
 			it->second->promise.set_value(content);
 		}
@@ -474,6 +483,7 @@ void SerialPort::processResponse(const std::string& response) {
 			// Promise already set
 		}
 		m_pendingCommands.erase(it);
+		break;
 	}
 }
 
@@ -487,6 +497,7 @@ void SerialPort::cleanupTimedOutCommands() {
 		                   now - it->second->timestamp);
 
 		if (elapsed > it->second->timeout) {
+			int timedOutId = it->first;
 			try {
 				it->second->promise.set_exception(std::make_exception_ptr(
 				                                      std::runtime_error("Command timeout")));
@@ -495,6 +506,10 @@ void SerialPort::cleanupTimedOutCommands() {
 				// Promise already set
 			}
 			it = m_pendingCommands.erase(it);
+			auto orderIt = std::find(m_pendingCommandOrder.begin(), m_pendingCommandOrder.end(), timedOutId);
+			if (orderIt != m_pendingCommandOrder.end()) {
+				m_pendingCommandOrder.erase(orderIt);
+			}
 		}
 		else {
 			++it;

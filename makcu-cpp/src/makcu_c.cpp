@@ -148,6 +148,9 @@ makcu_error_t makcu_find_first_device(char* port, size_t port_size) {
     
     try {
         auto first_port = makcu::Device::findFirstDevice();
+        if (first_port.empty()) {
+            return MAKCU_ERROR_CONNECTION_FAILED;
+        }
         safe_copy_string(port, port_size, first_port);
         return MAKCU_SUCCESS;
     } catch (...) {

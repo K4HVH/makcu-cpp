@@ -116,7 +116,7 @@ namespace makcu {
         std::condition_variable monitoringCondition;
         std::mutex monitoringMutex;
         
-        // Safe thread cleanup with timeout protection
+        // Safe thread cleanup
         void cleanupMonitoringThread() {
             if (!monitoringThread.joinable()) {
                 return;
@@ -131,19 +131,7 @@ namespace makcu {
                 monitoringCondition.notify_all();
             }
             
-            // Wait for thread to exit with timeout to prevent indefinite blocking
-            auto future = std::async(std::launch::async, [this]() {
-                monitoringThread.join();
-            });
-            
-            if (future.wait_for(std::chrono::milliseconds(2000)) == std::future_status::timeout) {
-                // Thread didn't exit cleanly within timeout
-                // This shouldn't happen with proper condition variable signaling, but handle it
-                #ifdef DEBUG
-                std::cerr << "Warning: Monitoring thread cleanup timeout, detaching thread" << std::endl;
-                #endif
-                monitoringThread.detach();
-            }
+            monitoringThread.join();
         }
 
         Impl() : serialPort(std::make_unique<SerialPort>())
@@ -517,14 +505,17 @@ namespace makcu {
         std::string targetPort = port.empty() ? findFirstDevice() : port;
         if (targetPort.empty()) {
             m_impl->status = ConnectionStatus::CONNECTION_ERROR;
+            m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             return false;
         }
 
         m_impl->status = ConnectionStatus::CONNECTING;
+        m_impl->atomicStatus.store(ConnectionStatus::CONNECTING, std::memory_order_release);
 
         // Open at initial baud rate
         if (!m_impl->serialPort->open(targetPort, INITIAL_BAUD_RATE)) {
             m_impl->status = ConnectionStatus::CONNECTION_ERROR;
+            m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             return false;
         }
 
@@ -1352,9 +1343,11 @@ namespace makcu {
     }
 
     std::string Device::receiveRawResponse() const {
-        // This method is deprecated and not recommended for performance
-        // Use async methods instead
-        return "";
+        if (!m_impl->connected.load(std::memory_order_acquire)) {
+            return "";
+        }
+
+        return m_impl->serialPort->readString();
     }
 
 

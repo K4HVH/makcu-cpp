@@ -24,7 +24,7 @@
 #include <future>
 #include <unordered_map>
 #include <thread>
-#include <queue>
+#include <deque>
 #include <chrono>
 
 #ifdef _WIN32
@@ -121,6 +121,7 @@ namespace makcu {
         // Command tracking system
         std::atomic<int> m_commandCounter{ 0 };
         std::unordered_map<int, std::unique_ptr<PendingCommand>> m_pendingCommands;
+        std::deque<int> m_pendingCommandOrder;
         std::mutex m_commandMutex;
 
         // High-performance listener thread
