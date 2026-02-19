@@ -26,6 +26,8 @@
 #include <thread>
 #include <deque>
 #include <chrono>
+#include <span>
+#include <stop_token>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -81,6 +83,7 @@ namespace makcu {
         bool sendCommand(const std::string& command);
 
         // Legacy methods for compatibility
+        bool write(std::span<const uint8_t> data);
         bool write(const std::vector<uint8_t>& data);
         bool write(const std::string& data);
         std::vector<uint8_t> read(size_t maxBytes = 1024);
@@ -125,8 +128,7 @@ namespace makcu {
         std::mutex m_commandMutex;
 
         // High-performance listener thread
-        std::thread m_listenerThread;
-        std::atomic<bool> m_stopListener{ false };
+        std::jthread m_listenerThread;
 
         // Button data processing
         ButtonCallback m_buttonCallback;
@@ -138,7 +140,7 @@ namespace makcu {
 
         bool configurePort() { return platformConfigurePort(); }
         void updateTimeouts() { platformUpdateTimeouts(); }
-        void listenerLoop();
+        void listenerLoop(std::stop_token stopToken);
         void processIncomingData();
         void handleButtonData(uint8_t data);
         void processResponse(const std::string& response);

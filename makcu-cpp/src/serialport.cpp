@@ -7,6 +7,9 @@
 #include <cstring>
 #include <chrono>
 #include <future>
+#include <expected>
+#include <charconv>
+#include <string_view>
 
 #ifdef _WIN32
 #include <setupapi.h>
@@ -27,6 +30,34 @@
 #endif
 
 namespace makcu {
+
+namespace {
+using ParsedTrackedResponse = std::pair<int, std::string>;
+
+std::expected<ParsedTrackedResponse, std::monostate> parseTrackedResponse(std::string_view content) {
+	const size_t hashPos = content.find('#');
+	if (hashPos == std::string_view::npos) {
+		return std::unexpected(std::monostate{});
+	}
+
+	const std::string_view idAndPayload = content.substr(hashPos + 1);
+	const size_t colonPos = idAndPayload.find(':');
+	if (colonPos == std::string_view::npos) {
+		return std::unexpected(std::monostate{});
+	}
+
+	const std::string_view idView = idAndPayload.substr(0, colonPos);
+	int cmdId = 0;
+	const auto [parseEnd, parseErr] =
+	    std::from_chars(idView.data(), idView.data() + idView.size(), cmdId);
+	if (parseErr != std::errc{} || parseEnd != idView.data() + idView.size()) {
+		return std::unexpected(std::monostate{});
+	}
+
+	std::string result(idAndPayload.substr(colonPos + 1));
+	return ParsedTrackedResponse{cmdId, std::move(result)};
+}
+} // namespace
 
 SerialPort::SerialPort()
 	: m_baudRate(115200)
@@ -80,8 +111,9 @@ bool SerialPort::open(const std::string& port, uint32_t baudRate) {
 		m_isOpen = true;
 
 		// Start high-performance listener thread (shared logic)
-		m_stopListener = false;
-		m_listenerThread = std::thread(&SerialPort::listenerLoop, this);
+		m_listenerThread = std::jthread([this](std::stop_token stopToken) {
+			listenerLoop(stopToken);
+		});
 
 		return true;
 	}
@@ -94,11 +126,9 @@ void SerialPort::close() {
 		return;
 	}
 
-	// Stop listener thread first
-	m_stopListener.store(true, std::memory_order_release);
-
-	// Wait for listener thread to finish.
+	// Stop listener thread first.
 	if (m_listenerThread.joinable()) {
+		m_listenerThread.request_stop();
 		m_listenerThread.join();
 	}
 
@@ -277,7 +307,7 @@ bool SerialPort::sendCommand(const std::string& command) {
 	return false;
 }
 
-void SerialPort::listenerLoop() {
+void SerialPort::listenerLoop(std::stop_token stopToken) {
 	// Optimized read buffers (shared logic)
 	std::vector<uint8_t> readBuffer(BUFFER_SIZE);
 	std::vector<uint8_t> lineBuffer(LINE_BUFFER_SIZE);
@@ -288,7 +318,7 @@ void SerialPort::listenerLoop() {
 	auto lastCleanup = std::chrono::steady_clock::now();
 	constexpr auto cleanupInterval = std::chrono::milliseconds(50);
 
-	while (!m_stopListener && m_isOpen.load()) {
+	while (!stopToken.stop_requested() && m_isOpen.load(std::memory_order_acquire)) {
 		try {
 			// Unified bytes available check
 			size_t bytesAvailable = platformBytesAvailable();
@@ -434,38 +464,26 @@ void SerialPort::processResponse(const std::string& response) {
 		content = content.substr(4);
 	}
 
-	// Check for command ID correlation
-	size_t hashPos = content.find('#');
-	if (hashPos != std::string::npos) {
-		// Extract command ID
-		std::string idStr = content.substr(hashPos + 1);
-		size_t colonPos = idStr.find(':');
-		if (colonPos != std::string::npos) {
+	// Check for command ID correlation.
+	const auto parsedResponse = parseTrackedResponse(content);
+	if (parsedResponse) {
+		const auto [cmdId, result] = parsedResponse.value();
+		std::lock_guard<std::mutex> lock(m_commandMutex);
+		auto it = m_pendingCommands.find(cmdId);
+		if (it != m_pendingCommands.end()) {
 			try {
-				int cmdId = std::stoi(idStr.substr(0, colonPos));
-				std::string result = idStr.substr(colonPos + 1);
-
-				std::lock_guard<std::mutex> lock(m_commandMutex);
-				auto it = m_pendingCommands.find(cmdId);
-				if (it != m_pendingCommands.end()) {
-					try {
-						it->second->promise.set_value(result);
-					}
-					catch (...) {
-						// Promise already set
-					}
-					m_pendingCommands.erase(it);
-					auto orderIt = std::find(m_pendingCommandOrder.begin(), m_pendingCommandOrder.end(), cmdId);
-					if (orderIt != m_pendingCommandOrder.end()) {
-						m_pendingCommandOrder.erase(orderIt);
-					}
-				}
-				return;
+				it->second->promise.set_value(result);
 			}
 			catch (...) {
-				// Failed to parse ID, treat as normal response
+				// Promise already set
+			}
+			m_pendingCommands.erase(it);
+			auto orderIt = std::find(m_pendingCommandOrder.begin(), m_pendingCommandOrder.end(), cmdId);
+			if (orderIt != m_pendingCommandOrder.end()) {
+				m_pendingCommandOrder.erase(orderIt);
 			}
 		}
+		return;
 	}
 
 	// Handle untracked response (oldest pending command)
@@ -547,7 +565,7 @@ std::string SerialPort::getPortName() const {
 	return m_portName;
 }
 
-bool SerialPort::write(const std::vector<uint8_t>& data) {
+bool SerialPort::write(std::span<const uint8_t> data) {
 	if (!m_isOpen.load(std::memory_order_acquire)) {
 		return false;
 	}
@@ -563,6 +581,10 @@ bool SerialPort::write(const std::vector<uint8_t>& data) {
 	}
 
 	return platformFlush();
+}
+
+bool SerialPort::write(const std::vector<uint8_t>& data) {
+	return write(std::span<const uint8_t>(data.data(), data.size()));
 }
 
 bool SerialPort::write(const std::string& data) {

@@ -4,9 +4,9 @@ High-performance C++ library for MAKCU mouse controllers. Sub-millisecond respon
 
 ## Prerequisites
 
-- C++17 compiler (for C++ API)
+- C++23 compiler (for C++ API)
 - C99 compiler (for C API only)
-- CMake 3.15+
+- CMake 3.20+
 - MAKCU Device (VID:PID = 1A86:55D3)
 - Linux: `libudev-dev`, `pkg-config`
 

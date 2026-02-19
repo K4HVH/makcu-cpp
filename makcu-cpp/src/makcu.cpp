@@ -10,8 +10,27 @@
 #include <mutex>
 #include <unordered_map>
 #include <condition_variable>
+#include <string_view>
+#include <utility>
 
 namespace makcu {
+
+    namespace {
+        bool equalsIgnoreAsciiCase(std::string_view lhs, std::string_view rhs) {
+            if (lhs.size() != rhs.size()) {
+                return false;
+            }
+
+            for (size_t i = 0; i < lhs.size(); ++i) {
+                if (std::toupper(static_cast<unsigned char>(lhs[i])) !=
+                    std::toupper(static_cast<unsigned char>(rhs[i]))) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    } // namespace
 
     // Constants
     constexpr uint16_t MAKCU_VID = 0x1A86;
@@ -111,8 +130,7 @@ namespace makcu {
         mutable std::mutex commandBufferMutex;
 
         // Connection monitoring
-        std::thread monitoringThread;
-        std::atomic<bool> stopMonitoring{false};
+        std::jthread monitoringThread;
         std::condition_variable monitoringCondition;
         std::mutex monitoringMutex;
         
@@ -121,16 +139,15 @@ namespace makcu {
             if (!monitoringThread.joinable()) {
                 return;
             }
-            
-            // Signal thread to stop with memory barrier
-            stopMonitoring.store(true, std::memory_order_release);
+
+            monitoringThread.request_stop();
             
             // Wake up the monitoring thread immediately
             {
                 std::lock_guard<std::mutex> lock(monitoringMutex);
                 monitoringCondition.notify_all();
             }
-            
+
             monitoringThread.join();
         }
 
@@ -242,12 +259,12 @@ namespace makcu {
             }
         }
 
-        void connectionMonitoringLoop() {
+        void connectionMonitoringLoop(std::stop_token stopToken) {
             int pollInterval = 150;
             const int maxPollInterval = 500;
             const int pollIncrement = 50;
             
-            while (!stopMonitoring.load(std::memory_order_acquire)) {
+            while (!stopToken.stop_requested()) {
                 // Double-check connection state with acquire semantics to ensure we see all updates
                 bool currentlyConnected = connected.load(std::memory_order_acquire);
                 if (!currentlyConnected) {
@@ -283,7 +300,7 @@ namespace makcu {
                 // Use condition variable for interruptible sleep with exponential backoff
                 std::unique_lock<std::mutex> lock(monitoringMutex);
                 if (monitoringCondition.wait_for(lock, std::chrono::milliseconds(pollInterval),
-                    [this] { return stopMonitoring.load(std::memory_order_acquire); })) {
+                    [&stopToken] { return stopToken.stop_requested(); })) {
                     // Condition was signaled (stop requested)
                     break;
                 }
@@ -581,7 +598,6 @@ namespace makcu {
         m_impl->deviceInfo.isConnected = true;
 
         // Atomically update all connection state before starting monitoring thread
-        m_impl->stopMonitoring.store(false, std::memory_order_release);
         m_impl->atomicStatus.store(ConnectionStatus::CONNECTED, std::memory_order_release);
         m_impl->status = ConnectionStatus::CONNECTED;
         
@@ -592,7 +608,9 @@ namespace makcu {
         // Start connection monitoring thread AFTER all state is established
         // This prevents the monitoring thread from seeing inconsistent state
         try {
-            m_impl->monitoringThread = std::thread(&Impl::connectionMonitoringLoop, m_impl.get());
+            m_impl->monitoringThread = std::jthread([impl = m_impl.get()](std::stop_token stopToken) {
+                impl->connectionMonitoringLoop(stopToken);
+            });
         } catch (const std::system_error& e) {
             // Thread creation failed - cleanup and return error
             m_impl->connected.store(false, std::memory_order_release);
@@ -743,7 +761,7 @@ namespace makcu {
 
         // Use cached button state for performance
         uint8_t mask = m_impl->currentButtonMask.load();
-        return (mask & (1 << static_cast<uint8_t>(button))) != 0;
+        return (mask & (1u << std::to_underlying(button))) != 0;
     }
 
 
@@ -1364,15 +1382,13 @@ namespace makcu {
     }
 
     MouseButton stringToMouseButton(const std::string& buttonName) {
-        std::string upper = buttonName;
-        std::transform(upper.begin(), upper.end(), upper.begin(),
-            [](unsigned char c) { return std::toupper(c); });
+        const std::string_view name{buttonName};
 
-        if (upper == "LEFT") return MouseButton::LEFT;
-        if (upper == "RIGHT") return MouseButton::RIGHT;
-        if (upper == "MIDDLE") return MouseButton::MIDDLE;
-        if (upper == "SIDE1") return MouseButton::SIDE1;
-        if (upper == "SIDE2") return MouseButton::SIDE2;
+        if (equalsIgnoreAsciiCase(name, "LEFT")) return MouseButton::LEFT;
+        if (equalsIgnoreAsciiCase(name, "RIGHT")) return MouseButton::RIGHT;
+        if (equalsIgnoreAsciiCase(name, "MIDDLE")) return MouseButton::MIDDLE;
+        if (equalsIgnoreAsciiCase(name, "SIDE1")) return MouseButton::SIDE1;
+        if (equalsIgnoreAsciiCase(name, "SIDE2")) return MouseButton::SIDE2;
 
         return MouseButton::LEFT; // Default fallback
     }
