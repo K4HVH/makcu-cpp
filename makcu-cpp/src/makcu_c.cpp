@@ -5,23 +5,26 @@
 #include <vector>
 #include <cstring>
 #include <functional>
+#include <mutex>
 
 extern "C" {
 
 // Internal wrapper structures
+struct makcu_callback_state {
+    std::mutex mutex;
+    makcu_mouse_button_callback_t mouse_callback = nullptr;
+    void* mouse_callback_user_data = nullptr;
+    makcu_connection_callback_t connection_callback = nullptr;
+    void* connection_callback_user_data = nullptr;
+};
+
 struct makcu_device {
     std::unique_ptr<makcu::Device> cpp_device;
-    makcu_mouse_button_callback_t mouse_callback;
-    void* mouse_callback_user_data;
-    makcu_connection_callback_t connection_callback;
-    void* connection_callback_user_data;
-    
+    std::shared_ptr<makcu_callback_state> callback_state;
+
     makcu_device() : 
         cpp_device(std::make_unique<makcu::Device>()),
-        mouse_callback(nullptr), 
-        mouse_callback_user_data(nullptr),
-        connection_callback(nullptr),
-        connection_callback_user_data(nullptr) {}
+        callback_state(std::make_shared<makcu_callback_state>()) {}
 };
 
 struct makcu_batch_builder {
@@ -608,13 +611,25 @@ makcu_error_t makcu_set_mouse_button_callback(makcu_device_t* device, makcu_mous
     if (!device) return MAKCU_ERROR_INVALID_DEVICE;
     
     try {
-        device->mouse_callback = callback;
-        device->mouse_callback_user_data = user_data;
+        const auto state = device->callback_state;
+        {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            state->mouse_callback = callback;
+            state->mouse_callback_user_data = user_data;
+        }
         
         if (callback) {
-            device->cpp_device->setMouseButtonCallback([device](makcu::MouseButton button, bool pressed) {
-                if (device->mouse_callback) {
-                    device->mouse_callback(convert_mouse_button_to_c(button), pressed, device->mouse_callback_user_data);
+            device->cpp_device->setMouseButtonCallback([state](makcu::MouseButton button, bool pressed) {
+                makcu_mouse_button_callback_t callbackFn = nullptr;
+                void* callbackUserData = nullptr;
+                {
+                    std::lock_guard<std::mutex> lock(state->mutex);
+                    callbackFn = state->mouse_callback;
+                    callbackUserData = state->mouse_callback_user_data;
+                }
+
+                if (callbackFn) {
+                    callbackFn(convert_mouse_button_to_c(button), pressed, callbackUserData);
                 }
             });
         } else {
@@ -631,13 +646,25 @@ makcu_error_t makcu_set_connection_callback(makcu_device_t* device, makcu_connec
     if (!device) return MAKCU_ERROR_INVALID_DEVICE;
     
     try {
-        device->connection_callback = callback;
-        device->connection_callback_user_data = user_data;
+        const auto state = device->callback_state;
+        {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            state->connection_callback = callback;
+            state->connection_callback_user_data = user_data;
+        }
         
         if (callback) {
-            device->cpp_device->setConnectionCallback([device](bool connected) {
-                if (device->connection_callback) {
-                    device->connection_callback(connected, device->connection_callback_user_data);
+            device->cpp_device->setConnectionCallback([state](bool connected) {
+                makcu_connection_callback_t callbackFn = nullptr;
+                void* callbackUserData = nullptr;
+                {
+                    std::lock_guard<std::mutex> lock(state->mutex);
+                    callbackFn = state->connection_callback;
+                    callbackUserData = state->connection_callback_user_data;
+                }
+
+                if (callbackFn) {
+                    callbackFn(connected, callbackUserData);
                 }
             });
         } else {

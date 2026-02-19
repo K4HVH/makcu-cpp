@@ -193,6 +193,19 @@ jobs:
       run: |
         cmake --build build --config Release --parallel
 
+    - name: Configure examples
+      run: |
+        cmake -S examples -B examples/build -G "Visual Studio 17 2022" -A x64 -Dmakcu-cpp_DIR="${{ github.workspace }}/build"
+
+    - name: Build examples
+      run: |
+        cmake --build examples/build --config Release --parallel
+
+    - name: Run C API smoke test
+      run: |
+        $env:Path = "${{ github.workspace }}\\build\\bin\\Release;$env:Path"
+        .\examples\build\bin\Release\c_api_test.exe
+
     - name: Install NSIS
       run: |
         choco install nsis -y
@@ -243,6 +256,18 @@ jobs:
     - name: Build
       run: |
         cmake --build build --parallel
+
+    - name: Configure examples
+      run: |
+        cmake -S examples -B examples/build -DCMAKE_BUILD_TYPE=Release -Dmakcu-cpp_DIR="${{ github.workspace }}/build"
+
+    - name: Build examples
+      run: |
+        cmake --build examples/build --parallel
+
+    - name: Run C API smoke test
+      run: |
+        LD_LIBRARY_PATH="${{ github.workspace }}/build/lib:${LD_LIBRARY_PATH}" ./examples/build/bin/c_api_test
 
     - name: Create packages
       run: |

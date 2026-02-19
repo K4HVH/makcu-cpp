@@ -10,6 +10,7 @@
 #include <expected>
 #include <charconv>
 #include <string_view>
+#include <utility>
 
 #ifdef _WIN32
 #include <setupapi.h>
@@ -129,7 +130,13 @@ void SerialPort::close() {
 	// Stop listener thread first.
 	if (m_listenerThread.joinable()) {
 		m_listenerThread.request_stop();
-		m_listenerThread.join();
+		if (std::this_thread::get_id() == m_listenerThread.get_id()) {
+			// Avoid self-join if close() is triggered from a listener callback.
+			m_listenerThread.detach();
+		}
+		else {
+			m_listenerThread.join();
+		}
 	}
 
 	// Cancel all pending commands with double-checked locking for safety
@@ -312,11 +319,45 @@ void SerialPort::listenerLoop(std::stop_token stopToken) {
 	std::vector<uint8_t> readBuffer(BUFFER_SIZE);
 	std::vector<uint8_t> lineBuffer(LINE_BUFFER_SIZE);
 	size_t linePos = 0;
-	// Keep parser state across read() calls so "km." and mask byte can span chunks.
-	bool expectButtonMask = false;
+	enum class ButtonPrefixState : uint8_t {
+		NONE,
+		K,
+		KM,
+		KM_DOT
+	};
+	ButtonPrefixState buttonPrefixState = ButtonPrefixState::NONE;
 
 	auto lastCleanup = std::chrono::steady_clock::now();
 	constexpr auto cleanupInterval = std::chrono::milliseconds(50);
+
+	auto appendTextByte = [&](uint8_t byte) {
+		if (byte == 0x0A) { // Line feed
+			if (linePos > 0) {
+				std::string line(lineBuffer.begin(), lineBuffer.begin() + linePos);
+				linePos = 0;
+				if (!line.empty()) {
+					processResponse(line);
+				}
+			}
+			return;
+		}
+
+		if (byte == 0x0D) { // Ignore carriage return
+			return;
+		}
+
+		if (linePos < LINE_BUFFER_SIZE - 1) {
+			lineBuffer[linePos++] = byte;
+			return;
+		}
+
+		// Buffer overflow protection - discard line and reset.
+#ifdef DEBUG
+		std::cerr << "SerialPort: Line buffer overflow, discarding data" << std::endl;
+#endif
+		linePos = 0;
+		buttonPrefixState = ButtonPrefixState::NONE;
+	};
 
 	while (!stopToken.stop_requested() && m_isOpen.load(std::memory_order_acquire)) {
 		try {
@@ -338,57 +379,75 @@ void SerialPort::listenerLoop(std::stop_token stopToken) {
 
 			// Shared byte processing logic
 			for (ssize_t i = 0; i < bytesRead; ++i) {
-				uint8_t byte = readBuffer[i];
+				const uint8_t byte = readBuffer[i];
+				bool consumed = false;
 
-				// If km. was just seen, and the byte looks like a button mask (<32), handle it
-				if (expectButtonMask) {
-					if (byte < 32) {
-						handleButtonData(byte);
+				auto flushPrefixAsText = [&]() {
+					switch (buttonPrefixState) {
+						case ButtonPrefixState::K:
+							appendTextByte('k');
+							break;
+						case ButtonPrefixState::KM:
+							appendTextByte('k');
+							appendTextByte('m');
+							break;
+						case ButtonPrefixState::KM_DOT:
+							appendTextByte('k');
+							appendTextByte('m');
+							appendTextByte('.');
+							break;
+						case ButtonPrefixState::NONE:
+						default:
+							break;
 					}
-					expectButtonMask = false;
+					buttonPrefixState = ButtonPrefixState::NONE;
+				};
+
+				// Detect standalone button prefix "km." only when the current text line is empty.
+				if (linePos == 0 || buttonPrefixState != ButtonPrefixState::NONE) {
+					switch (buttonPrefixState) {
+						case ButtonPrefixState::NONE:
+							if (byte == 'k') {
+								buttonPrefixState = ButtonPrefixState::K;
+								consumed = true;
+							}
+							break;
+						case ButtonPrefixState::K:
+							if (byte == 'm') {
+								buttonPrefixState = ButtonPrefixState::KM;
+								consumed = true;
+							}
+							else {
+								flushPrefixAsText();
+							}
+							break;
+						case ButtonPrefixState::KM:
+							if (byte == '.') {
+								buttonPrefixState = ButtonPrefixState::KM_DOT;
+								consumed = true;
+							}
+							else {
+								flushPrefixAsText();
+							}
+							break;
+						case ButtonPrefixState::KM_DOT:
+							if (byte < 32) {
+								handleButtonData(byte);
+								buttonPrefixState = ButtonPrefixState::NONE;
+								consumed = true;
+							}
+							else {
+								flushPrefixAsText();
+							}
+							break;
+					}
+				}
+
+				if (consumed) {
 					continue;
 				}
 
-				// Detect "km."
-				if (byte == 'k') {
-					linePos = 0;
-					lineBuffer[linePos++] = byte;
-					continue;
-				}
-
-				if (linePos == 1 && byte == 'm') {
-					lineBuffer[linePos++] = byte;
-					continue;
-				}
-
-				if (linePos == 2 && byte == '.') {
-					expectButtonMask = true;
-					linePos = 0; // discard prefix
-					continue;
-				}
-
-				// Handle text response data
-				if (byte == 0x0A) { // Line feed
-					if (linePos > 0) {
-						std::string line(lineBuffer.begin(), lineBuffer.begin() + linePos);
-						linePos = 0;
-						if (!line.empty()) {
-							processResponse(line);
-						}
-					}
-				}
-				else if (byte != 0x0D) { // Ignore carriage return
-					if (linePos < LINE_BUFFER_SIZE - 1) {
-						lineBuffer[linePos++] = byte;
-					}
-					else {
-						// Buffer overflow protection - discard line and reset
-#ifdef DEBUG
-						std::cerr << "SerialPort: Line buffer overflow, discarding data" << std::endl;
-#endif
-						linePos = 0;
-					}
-				}
+				appendTextByte(byte);
 			}
 
 			// Periodic cleanup of timed-out commands (shared logic)
@@ -433,25 +492,32 @@ void SerialPort::listenerLoop(std::stop_token stopToken) {
 }
 
 void SerialPort::handleButtonData(uint8_t data) {
-	uint8_t lastMask = m_lastButtonMask.load();
+	const uint8_t lastMask = m_lastButtonMask.load(std::memory_order_acquire);
 	if (data == lastMask) {
 		return; // No change
 	}
 
-	m_lastButtonMask.store(data);
+	m_lastButtonMask.store(data, std::memory_order_release);
 
-	if (m_buttonCallback) {
-		// Only process changed bits
-		uint8_t changedBits = data ^ lastMask;
-		for (int bit = 0; bit < 5; ++bit) {
-			if (changedBits & (1 << bit)) {
-				bool isPressed = data & (1 << bit);
-				try {
-					m_buttonCallback(bit, isPressed);
-				}
-				catch (...) {
-					// Ignore callback exceptions
-				}
+	ButtonCallback callbackCopy;
+	{
+		std::lock_guard<std::mutex> lock(m_buttonCallbackMutex);
+		callbackCopy = m_buttonCallback;
+	}
+	if (!callbackCopy) {
+		return;
+	}
+
+	// Only process changed bits.
+	const uint8_t changedBits = static_cast<uint8_t>(data ^ lastMask);
+	for (int bit = 0; bit < 5; ++bit) {
+		if (changedBits & (1 << bit)) {
+			const bool isPressed = (data & (1 << bit)) != 0;
+			try {
+				callbackCopy(bit, isPressed);
+			}
+			catch (...) {
+				// Ignore callback exceptions.
 			}
 		}
 	}
@@ -542,7 +608,8 @@ int SerialPort::generateCommandId() {
 
 
 void SerialPort::setButtonCallback(ButtonCallback callback) {
-	m_buttonCallback = callback;
+	std::lock_guard<std::mutex> lock(m_buttonCallbackMutex);
+	m_buttonCallback = std::move(callback);
 }
 
 // Legacy compatibility methods
