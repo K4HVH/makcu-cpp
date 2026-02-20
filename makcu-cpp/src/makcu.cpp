@@ -1562,6 +1562,7 @@ namespace makcu {
         case MouseButton::MIDDLE: return "MIDDLE";
         case MouseButton::SIDE1: return "SIDE1";
         case MouseButton::SIDE2: return "SIDE2";
+        case MouseButton::UNKNOWN: return "UNKNOWN";
         }
         return "UNKNOWN";
     }
@@ -1575,7 +1576,7 @@ namespace makcu {
         if (equalsIgnoreAsciiCase(name, "SIDE1")) return MouseButton::SIDE1;
         if (equalsIgnoreAsciiCase(name, "SIDE2")) return MouseButton::SIDE2;
 
-        return MouseButton::LEFT; // Default fallback
+        return MouseButton::UNKNOWN;
     }
 
 } // namespace makcu

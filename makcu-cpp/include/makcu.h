@@ -40,7 +40,8 @@ namespace makcu {
         RIGHT = 1,
         MIDDLE = 2,
         SIDE1 = 3,
-        SIDE2 = 4
+        SIDE2 = 4,
+        UNKNOWN = 255
     };
 
     enum class ConnectionStatus {
@@ -75,6 +76,7 @@ namespace makcu {
             case MouseButton::MIDDLE: return middle;
             case MouseButton::SIDE1: return side1;
             case MouseButton::SIDE2: return side2;
+            case MouseButton::UNKNOWN: return false;
             }
             return false;
         }
@@ -86,6 +88,7 @@ namespace makcu {
             case MouseButton::MIDDLE: middle = state; break;
             case MouseButton::SIDE1: side1 = state; break;
             case MouseButton::SIDE2: side2 = state; break;
+            case MouseButton::UNKNOWN: break;
             }
         }
     };

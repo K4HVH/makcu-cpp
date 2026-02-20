@@ -7,6 +7,7 @@
 #include <functional>
 #include <mutex>
 #include <atomic>
+#include <cctype>
 
 extern "C" {
 
@@ -58,6 +59,8 @@ static bool try_convert_mouse_button(makcu_mouse_button_t button, makcu::MouseBu
         case MAKCU_MOUSE_SIDE2:
             out_button = makcu::MouseButton::SIDE2;
             return true;
+        case MAKCU_MOUSE_UNKNOWN:
+            return false;
     }
     return false;
 }
@@ -69,8 +72,9 @@ static makcu_mouse_button_t convert_mouse_button_to_c(makcu::MouseButton button)
         case makcu::MouseButton::MIDDLE: return MAKCU_MOUSE_MIDDLE;
         case makcu::MouseButton::SIDE1: return MAKCU_MOUSE_SIDE1;
         case makcu::MouseButton::SIDE2: return MAKCU_MOUSE_SIDE2;
+        case makcu::MouseButton::UNKNOWN: return MAKCU_MOUSE_UNKNOWN;
     }
-    return MAKCU_MOUSE_LEFT;
+    return MAKCU_MOUSE_UNKNOWN;
 }
 
 static makcu_connection_status_t convert_connection_status(makcu::ConnectionStatus status) {
@@ -118,6 +122,23 @@ static makcu_error_t validate_batch_builder(const makcu_batch_builder_t* batch) 
         return MAKCU_ERROR_INVALID_DEVICE;
     }
     return MAKCU_SUCCESS;
+}
+
+static bool equals_ignore_ascii_case(const char* lhs, const char* rhs) {
+    if (!lhs || !rhs) {
+        return false;
+    }
+
+    while (*lhs != '\0' && *rhs != '\0') {
+        if (std::toupper(static_cast<unsigned char>(*lhs)) !=
+            std::toupper(static_cast<unsigned char>(*rhs))) {
+            return false;
+        }
+        ++lhs;
+        ++rhs;
+    }
+
+    return *lhs == '\0' && *rhs == '\0';
 }
 
 // Error handling
@@ -970,18 +991,19 @@ const char* makcu_mouse_button_to_string(makcu_mouse_button_t button) {
         case MAKCU_MOUSE_MIDDLE: return "MIDDLE";
         case MAKCU_MOUSE_SIDE1: return "SIDE1";
         case MAKCU_MOUSE_SIDE2: return "SIDE2";
-        default: return "Unknown";
+        case MAKCU_MOUSE_UNKNOWN: return "UNKNOWN";
+        default: return "UNKNOWN";
     }
 }
 
 makcu_mouse_button_t makcu_string_to_mouse_button(const char* button_name) {
-    if (!button_name) return MAKCU_MOUSE_LEFT;
-    if (strcmp(button_name, "LEFT") == 0) return MAKCU_MOUSE_LEFT;
-    if (strcmp(button_name, "RIGHT") == 0) return MAKCU_MOUSE_RIGHT;
-    if (strcmp(button_name, "MIDDLE") == 0) return MAKCU_MOUSE_MIDDLE;
-    if (strcmp(button_name, "SIDE1") == 0) return MAKCU_MOUSE_SIDE1;
-    if (strcmp(button_name, "SIDE2") == 0) return MAKCU_MOUSE_SIDE2;
-    return MAKCU_MOUSE_LEFT;
+    if (!button_name) return MAKCU_MOUSE_UNKNOWN;
+    if (equals_ignore_ascii_case(button_name, "LEFT")) return MAKCU_MOUSE_LEFT;
+    if (equals_ignore_ascii_case(button_name, "RIGHT")) return MAKCU_MOUSE_RIGHT;
+    if (equals_ignore_ascii_case(button_name, "MIDDLE")) return MAKCU_MOUSE_MIDDLE;
+    if (equals_ignore_ascii_case(button_name, "SIDE1")) return MAKCU_MOUSE_SIDE1;
+    if (equals_ignore_ascii_case(button_name, "SIDE2")) return MAKCU_MOUSE_SIDE2;
+    return MAKCU_MOUSE_UNKNOWN;
 }
 
 // Performance profiling

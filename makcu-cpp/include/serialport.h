@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 #include <atomic>
+#include <cstdint>
 #include <mutex>
 #include <future>
 #include <unordered_map>
@@ -114,6 +115,7 @@ namespace makcu {
         uint32_t m_timeout;
         std::atomic<bool> m_isOpen;
         mutable std::mutex m_mutex;
+        mutable std::mutex m_nativeHandleMutex;
 
 #ifdef _WIN32
         HANDLE m_handle;
@@ -126,7 +128,7 @@ namespace makcu {
 #endif
 
         // Command tracking system
-        std::atomic<int> m_commandCounter{ 0 };
+        uint32_t m_commandCounter{ 0 };
         std::unordered_map<int, std::unique_ptr<PendingCommand>> m_pendingCommands;
         std::deque<int> m_pendingCommandOrder;
         std::mutex m_commandMutex;
@@ -157,6 +159,7 @@ namespace makcu {
         void platformClose();
         bool platformConfigurePort();
         void platformUpdateTimeouts();
+        void platformUpdateTimeoutsUnlocked();
         ssize_t platformWrite(const void* data, size_t length);
         ssize_t platformRead(void* buffer, size_t maxBytes);
         size_t platformBytesAvailable();
