@@ -99,8 +99,6 @@ foreach(target ${LIBRARY_TARGETS})
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/makcu-cpp/include>
             $<INSTALL_INTERFACE:include/makcu>
     )
-    target_compile_definitions(${target} PRIVATE MAKCU_INTERNAL_BUILD)
-
     # Link libraries
     target_link_libraries(${target} PUBLIC Threads::Threads)
 
@@ -127,7 +125,6 @@ foreach(target ${LIBRARY_TARGETS})
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
 endforeach()
-
 
 # Install targets
 install(TARGETS ${LIBRARY_TARGETS}

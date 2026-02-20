@@ -1,10 +1,10 @@
 #include <makcu.h>
-#include <serialport.h>
 #include <iostream>
 #include <thread>
 #include <chrono>
 #include <vector>
 #include <future>
+#include <string_view>
 
 void mouseButtonCallback(makcu::MouseButton button, bool isPressed) {
     std::string buttonName = makcu::mouseButtonToString(button);
@@ -14,6 +14,12 @@ void mouseButtonCallback(makcu::MouseButton button, bool isPressed) {
 
 void connectionCallback(bool connected) {
     std::cout << "Device " << (connected ? "CONNECTED" : "DISCONNECTED") << std::endl;
+}
+
+void logCommandResult(std::string_view command, bool ok) {
+    if (!ok) {
+        std::cout << "Command failed: " << command << '\n';
+    }
 }
 
 void performanceTest() {
@@ -35,7 +41,7 @@ void performanceTest() {
     // Test 1: Rapid fire mouse movements (gaming scenario)
     std::cout << "1. Testing rapid mouse movements (100 commands)...\n";
     for (int i = 0; i < 100; ++i) {
-        device.mouseMove(i % 10, i % 10);
+        logCommandResult("km.move", device.mouseMove(i % 10, i % 10));
     }
 
     auto movements_end = std::chrono::high_resolution_clock::now();
@@ -46,7 +52,7 @@ void performanceTest() {
     std::cout << "2. Testing rapid clicking (50 clicks)...\n";
     auto click_start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 50; ++i) {
-        device.click(makcu::MouseButton::LEFT);
+        logCommandResult("km.left click", device.click(makcu::MouseButton::LEFT));
     }
     auto click_end = std::chrono::high_resolution_clock::now();
     auto click_ms = std::chrono::duration_cast<std::chrono::milliseconds>(click_end - click_start).count();
@@ -65,7 +71,7 @@ void performanceTest() {
         .dragSmooth(makcu::MouseButton::MIDDLE, 0, -25, 5)
         .scroll(3)
         .scroll(-3);
-    batch.execute();
+    logCommandResult("batch.execute", batch.execute());
 
     auto batch_end = std::chrono::high_resolution_clock::now();
     auto batch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(batch_end - batch_start).count();
@@ -76,11 +82,11 @@ void performanceTest() {
     auto async_start = std::chrono::high_resolution_clock::now();
 
     // Use synchronous methods for maximum performance (fire-and-forget)
-    device.mouseMove(25, 25);
-    device.mouseDrag(makcu::MouseButton::LEFT, -10, 10);
-    device.mouseMoveSmooth(-15, -35, 10);
-    device.mouseDragBezier(makcu::MouseButton::RIGHT, 15, 15, 8, 7, 7);
-    device.mouseWheel(2);
+    logCommandResult("km.move", device.mouseMove(25, 25));
+    logCommandResult("km.drag left", device.mouseDrag(makcu::MouseButton::LEFT, -10, 10));
+    logCommandResult("km.move smooth", device.mouseMoveSmooth(-15, -35, 10));
+    logCommandResult("km.drag bezier right", device.mouseDragBezier(makcu::MouseButton::RIGHT, 15, 15, 8, 7, 7));
+    logCommandResult("km.wheel", device.mouseWheel(2));
 
     auto async_end = std::chrono::high_resolution_clock::now();
     auto async_ms = std::chrono::duration_cast<std::chrono::milliseconds>(async_end - async_start).count();
@@ -121,26 +127,26 @@ void gamingScenarioDemo() {
     // Simulate recoil control with smooth movement
     std::cout << "1. Recoil control pattern...\n";
     for (int i = 0; i < 10; ++i) {
-        device.mouseMoveSmooth(0, -2, 3);  // Small downward adjustments
+        logCommandResult("km.move smooth", device.mouseMoveSmooth(0, -2, 3));  // Small downward adjustments
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     // Simulate rapid fire with perfect timing
     std::cout << "2. Rapid fire sequence...\n";
     for (int i = 0; i < 20; ++i) {
-        device.click(makcu::MouseButton::LEFT);
+        logCommandResult("km.left click", device.click(makcu::MouseButton::LEFT));
         std::this_thread::sleep_for(std::chrono::milliseconds(50)); // 20 CPS
     }
 
     // Simulate weapon switch + aim
     std::cout << "3. Weapon switch + aim sequence...\n";
-    device.mouseWheel(1);  // Switch weapon
+    logCommandResult("km.wheel", device.mouseWheel(1));  // Switch weapon
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    device.mouseMoveSmooth(75, -25, 15);  // Smooth aim to target
-    device.click(makcu::MouseButton::RIGHT);  // Aim down sights
+    logCommandResult("km.move smooth", device.mouseMoveSmooth(75, -25, 15));  // Smooth aim to target
+    logCommandResult("km.right click", device.click(makcu::MouseButton::RIGHT));  // Aim down sights
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    device.click(makcu::MouseButton::LEFT);   // Fire
-    device.click(makcu::MouseButton::RIGHT);  // Release ADS
+    logCommandResult("km.left click", device.click(makcu::MouseButton::LEFT));   // Fire
+    logCommandResult("km.right click", device.click(makcu::MouseButton::RIGHT));  // Release ADS
 
     std::cout << "Gaming scenario complete!\n";
     device.disconnect();
@@ -161,16 +167,16 @@ void lockingDemo() {
 
     // Lock X-axis movement
     std::cout << "1. Locking X-axis for 3 seconds...\n";
-    device.lockMouseX(true);
+    logCommandResult("km.lock_mx(1)", device.lockMouseX(true));
     std::this_thread::sleep_for(std::chrono::seconds(3));
-    device.lockMouseX(false);
+    logCommandResult("km.lock_mx(0)", device.lockMouseX(false));
     std::cout << "   X-axis unlocked\n";
 
     // Lock left mouse button
     std::cout << "2. Locking left mouse button for 2 seconds...\n";
-    device.lockMouseLeft(true);
+    logCommandResult("km.lock_ml(1)", device.lockMouseLeft(true));
     std::this_thread::sleep_for(std::chrono::seconds(2));
-    device.lockMouseLeft(false);
+    logCommandResult("km.lock_ml(0)", device.lockMouseLeft(false));
     std::cout << "   Left button unlocked\n";
 
     // Show all lock states
@@ -197,19 +203,19 @@ void dragMovementDemo() {
 
     // Test 1: Basic drag operations
     std::cout << "1. Basic drag movements...\n";
-    device.mouseDrag(makcu::MouseButton::LEFT, 100, 50);    // Drag with left button
+    logCommandResult("km.drag left", device.mouseDrag(makcu::MouseButton::LEFT, 100, 50));    // Drag with left button
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    device.mouseDrag(makcu::MouseButton::RIGHT, -50, 75);   // Drag with right button
+    logCommandResult("km.drag right", device.mouseDrag(makcu::MouseButton::RIGHT, -50, 75));   // Drag with right button
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
     // Test 2: Smooth drag operations
     std::cout << "2. Smooth drag movements...\n";
-    device.mouseDragSmooth(makcu::MouseButton::LEFT, 150, -100, 15);  // Smooth drag
+    logCommandResult("km.drag smooth left", device.mouseDragSmooth(makcu::MouseButton::LEFT, 150, -100, 15));  // Smooth drag
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
     // Test 3: Bezier drag operations
     std::cout << "3. Bezier curve drag movements...\n";
-    device.mouseDragBezier(makcu::MouseButton::MIDDLE, -100, 50, 20, 50, -25);  // Curved drag
+    logCommandResult("km.drag bezier middle", device.mouseDragBezier(makcu::MouseButton::MIDDLE, -100, 50, 20, 50, -25));  // Curved drag
     std::this_thread::sleep_for(std::chrono::milliseconds(400));
 
     // Test 4: Batch drag operations
@@ -221,16 +227,16 @@ void dragMovementDemo() {
          .moveBezier(15, 15, 6, 8, 8)  // Bezier move without dragging
          .dragBezier(makcu::MouseButton::MIDDLE, 30, -30, 12, 15, -15)
          .scroll(2);
-    batch.execute();
+    logCommandResult("batch.execute", batch.execute());
 
     // Test 5: Advanced drag patterns (useful for drawing/selection)
     std::cout << "5. Advanced drag patterns (selection box)...\n";
-    device.mouseDown(makcu::MouseButton::LEFT);     // Start selection
-    device.mouseMove(100, 0);                       // Top edge
-    device.mouseMove(0, 100);                       // Right edge  
-    device.mouseMove(-100, 0);                      // Bottom edge
-    device.mouseMove(0, -100);                      // Left edge (back to start)
-    device.mouseUp(makcu::MouseButton::LEFT);       // End selection
+    logCommandResult("km.left down", device.mouseDown(makcu::MouseButton::LEFT));     // Start selection
+    logCommandResult("km.move", device.mouseMove(100, 0));                             // Top edge
+    logCommandResult("km.move", device.mouseMove(0, 100));                             // Right edge
+    logCommandResult("km.move", device.mouseMove(-100, 0));                            // Bottom edge
+    logCommandResult("km.move", device.mouseMove(0, -100));                            // Left edge (back to start)
+    logCommandResult("km.left up", device.mouseUp(makcu::MouseButton::LEFT));          // End selection
 
     std::cout << "Drag movement demo complete!\n";
     device.disconnect();
@@ -316,11 +322,11 @@ int main() {
         std::cout << "\n=== BASIC FUNCTIONALITY TEST ===\n";
         std::cout << "Testing basic mouse operations...\n";
 
-        device.mouseMove(50, 0);
-        device.mouseMove(-50, 0);
-        device.click(makcu::MouseButton::LEFT);
-        device.mouseWheel(3);
-        device.mouseWheel(-3);
+        logCommandResult("km.move", device.mouseMove(50, 0));
+        logCommandResult("km.move", device.mouseMove(-50, 0));
+        logCommandResult("km.left click", device.click(makcu::MouseButton::LEFT));
+        logCommandResult("km.wheel", device.mouseWheel(3));
+        logCommandResult("km.wheel", device.mouseWheel(-3));
 
         std::cout << "Basic test completed successfully!\n";
         device.disconnect();

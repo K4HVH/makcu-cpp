@@ -6,6 +6,7 @@
 #include <cstring>
 #include <functional>
 #include <mutex>
+#include <atomic>
 
 extern "C" {
 
@@ -21,29 +22,44 @@ struct makcu_callback_state {
 struct makcu_device {
     std::unique_ptr<makcu::Device> cpp_device;
     std::shared_ptr<makcu_callback_state> callback_state;
+    std::shared_ptr<std::atomic<bool>> lifetime_token;
 
     makcu_device() : 
         cpp_device(std::make_unique<makcu::Device>()),
-        callback_state(std::make_shared<makcu_callback_state>()) {}
+        callback_state(std::make_shared<makcu_callback_state>()),
+        lifetime_token(std::make_shared<std::atomic<bool>>(true)) {}
 };
 
 struct makcu_batch_builder {
     std::unique_ptr<makcu::Device::BatchCommandBuilder> cpp_batch;
+    std::shared_ptr<std::atomic<bool>> owner_lifetime;
     
-    makcu_batch_builder(makcu::Device::BatchCommandBuilder&& batch) :
-        cpp_batch(std::make_unique<makcu::Device::BatchCommandBuilder>(std::move(batch))) {}
+    makcu_batch_builder(makcu::Device::BatchCommandBuilder&& batch,
+                        std::shared_ptr<std::atomic<bool>> lifetime) :
+        cpp_batch(std::make_unique<makcu::Device::BatchCommandBuilder>(std::move(batch))),
+        owner_lifetime(std::move(lifetime)) {}
 };
 
 // Helper functions
-static makcu::MouseButton convert_mouse_button(makcu_mouse_button_t button) {
+static bool try_convert_mouse_button(makcu_mouse_button_t button, makcu::MouseButton& out_button) {
     switch (button) {
-        case MAKCU_MOUSE_LEFT: return makcu::MouseButton::LEFT;
-        case MAKCU_MOUSE_RIGHT: return makcu::MouseButton::RIGHT;
-        case MAKCU_MOUSE_MIDDLE: return makcu::MouseButton::MIDDLE;
-        case MAKCU_MOUSE_SIDE1: return makcu::MouseButton::SIDE1;
-        case MAKCU_MOUSE_SIDE2: return makcu::MouseButton::SIDE2;
+        case MAKCU_MOUSE_LEFT:
+            out_button = makcu::MouseButton::LEFT;
+            return true;
+        case MAKCU_MOUSE_RIGHT:
+            out_button = makcu::MouseButton::RIGHT;
+            return true;
+        case MAKCU_MOUSE_MIDDLE:
+            out_button = makcu::MouseButton::MIDDLE;
+            return true;
+        case MAKCU_MOUSE_SIDE1:
+            out_button = makcu::MouseButton::SIDE1;
+            return true;
+        case MAKCU_MOUSE_SIDE2:
+            out_button = makcu::MouseButton::SIDE2;
+            return true;
     }
-    return makcu::MouseButton::LEFT;
+    return false;
 }
 
 static makcu_mouse_button_t convert_mouse_button_to_c(makcu::MouseButton button) {
@@ -93,6 +109,17 @@ static void safe_copy_string(char* dest, size_t dest_size, const std::string& sr
     }
 }
 
+static makcu_error_t validate_batch_builder(const makcu_batch_builder_t* batch) {
+    if (!batch || !batch->cpp_batch) {
+        return MAKCU_ERROR_INVALID_PARAMETER;
+    }
+    if (!batch->owner_lifetime ||
+        !batch->owner_lifetime->load(std::memory_order_acquire)) {
+        return MAKCU_ERROR_INVALID_DEVICE;
+    }
+    return MAKCU_SUCCESS;
+}
+
 // Error handling
 const char* makcu_error_string(makcu_error_t error) {
     switch (error) {
@@ -117,6 +144,9 @@ makcu_device_t* makcu_device_create(void) {
 }
 
 void makcu_device_destroy(makcu_device_t* device) {
+    if (device && device->lifetime_token) {
+        device->lifetime_token->store(false, std::memory_order_release);
+    }
     delete device;
 }
 
@@ -236,6 +266,11 @@ makcu_error_t makcu_get_version(makcu_device_t* device, char* version, size_t ve
     
     try {
         auto cpp_version = device->cpp_device->getVersion();
+        if (cpp_version.empty()) {
+            return device->cpp_device->isConnected()
+                ? MAKCU_ERROR_COMMAND_FAILED
+                : MAKCU_ERROR_CONNECTION_FAILED;
+        }
         safe_copy_string(version, version_size, cpp_version);
         return MAKCU_SUCCESS;
     } catch (...) {
@@ -250,7 +285,12 @@ makcu_error_t makcu_mouse_down(makcu_device_t* device, makcu_mouse_button_t butt
     }
     
     try {
-        bool success = device->cpp_device->mouseDown(convert_mouse_button(button));
+        makcu::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKCU_ERROR_INVALID_PARAMETER;
+        }
+
+        bool success = device->cpp_device->mouseDown(cpp_button);
         return success ? MAKCU_SUCCESS : MAKCU_ERROR_COMMAND_FAILED;
     } catch (...) {
         return handle_exception();
@@ -263,7 +303,12 @@ makcu_error_t makcu_mouse_up(makcu_device_t* device, makcu_mouse_button_t button
     }
     
     try {
-        bool success = device->cpp_device->mouseUp(convert_mouse_button(button));
+        makcu::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKCU_ERROR_INVALID_PARAMETER;
+        }
+
+        bool success = device->cpp_device->mouseUp(cpp_button);
         return success ? MAKCU_SUCCESS : MAKCU_ERROR_COMMAND_FAILED;
     } catch (...) {
         return handle_exception();
@@ -276,7 +321,12 @@ makcu_error_t makcu_mouse_click(makcu_device_t* device, makcu_mouse_button_t but
     }
     
     try {
-        bool success = device->cpp_device->click(convert_mouse_button(button));
+        makcu::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKCU_ERROR_INVALID_PARAMETER;
+        }
+
+        bool success = device->cpp_device->click(cpp_button);
         return success ? MAKCU_SUCCESS : MAKCU_ERROR_COMMAND_FAILED;
     } catch (...) {
         return handle_exception();
@@ -290,7 +340,12 @@ makcu_error_t makcu_mouse_button_state(makcu_device_t* device, makcu_mouse_butto
     }
     
     try {
-        *state = device->cpp_device->mouseButtonState(convert_mouse_button(button));
+        makcu::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKCU_ERROR_INVALID_PARAMETER;
+        }
+
+        *state = device->cpp_device->mouseButtonState(cpp_button);
         return MAKCU_SUCCESS;
     } catch (...) {
         return handle_exception();
@@ -344,7 +399,12 @@ makcu_error_t makcu_mouse_drag(makcu_device_t* device, makcu_mouse_button_t butt
     }
     
     try {
-        bool success = device->cpp_device->mouseDrag(convert_mouse_button(button), x, y);
+        makcu::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKCU_ERROR_INVALID_PARAMETER;
+        }
+
+        bool success = device->cpp_device->mouseDrag(cpp_button, x, y);
         return success ? MAKCU_SUCCESS : MAKCU_ERROR_COMMAND_FAILED;
     } catch (...) {
         return handle_exception();
@@ -357,7 +417,12 @@ makcu_error_t makcu_mouse_drag_smooth(makcu_device_t* device, makcu_mouse_button
     }
     
     try {
-        bool success = device->cpp_device->mouseDragSmooth(convert_mouse_button(button), x, y, segments);
+        makcu::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKCU_ERROR_INVALID_PARAMETER;
+        }
+
+        bool success = device->cpp_device->mouseDragSmooth(cpp_button, x, y, segments);
         return success ? MAKCU_SUCCESS : MAKCU_ERROR_COMMAND_FAILED;
     } catch (...) {
         return handle_exception();
@@ -370,7 +435,12 @@ makcu_error_t makcu_mouse_drag_bezier(makcu_device_t* device, makcu_mouse_button
     }
     
     try {
-        bool success = device->cpp_device->mouseDragBezier(convert_mouse_button(button), x, y, segments, ctrl_x, ctrl_y);
+        makcu::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKCU_ERROR_INVALID_PARAMETER;
+        }
+
+        bool success = device->cpp_device->mouseDragBezier(cpp_button, x, y, segments, ctrl_x, ctrl_y);
         return success ? MAKCU_SUCCESS : MAKCU_ERROR_COMMAND_FAILED;
     } catch (...) {
         return handle_exception();
@@ -686,7 +756,11 @@ makcu_error_t makcu_click_sequence(makcu_device_t* device, const makcu_mouse_but
         cpp_buttons.reserve(count);
         
         for (size_t i = 0; i < count; i++) {
-            cpp_buttons.push_back(convert_mouse_button(buttons[i]));
+            makcu::MouseButton cpp_button{};
+            if (!try_convert_mouse_button(buttons[i], cpp_button)) {
+                return MAKCU_ERROR_INVALID_PARAMETER;
+            }
+            cpp_buttons.push_back(cpp_button);
         }
         
         bool success = device->cpp_device->clickSequence(cpp_buttons, std::chrono::milliseconds(delay_ms));
@@ -737,7 +811,7 @@ makcu_batch_builder_t* makcu_create_batch(makcu_device_t* device) {
     
     try {
         auto cpp_batch = device->cpp_device->createBatch();
-        return new makcu_batch_builder(std::move(cpp_batch));
+        return new makcu_batch_builder(std::move(cpp_batch), device->lifetime_token);
     } catch (...) {
         return nullptr;
     }
@@ -748,7 +822,8 @@ void makcu_batch_destroy(makcu_batch_builder_t* batch) {
 }
 
 makcu_error_t makcu_batch_move(makcu_batch_builder_t* batch, int32_t x, int32_t y) {
-    if (!batch) return MAKCU_ERROR_INVALID_PARAMETER;
+    makcu_error_t validation = validate_batch_builder(batch);
+    if (validation != MAKCU_SUCCESS) return validation;
     try {
         batch->cpp_batch->move(x, y);
         return MAKCU_SUCCESS;
@@ -756,7 +831,8 @@ makcu_error_t makcu_batch_move(makcu_batch_builder_t* batch, int32_t x, int32_t 
 }
 
 makcu_error_t makcu_batch_move_smooth(makcu_batch_builder_t* batch, int32_t x, int32_t y, uint32_t segments) {
-    if (!batch) return MAKCU_ERROR_INVALID_PARAMETER;
+    makcu_error_t validation = validate_batch_builder(batch);
+    if (validation != MAKCU_SUCCESS) return validation;
     try {
         batch->cpp_batch->moveSmooth(x, y, segments);
         return MAKCU_SUCCESS;
@@ -764,7 +840,8 @@ makcu_error_t makcu_batch_move_smooth(makcu_batch_builder_t* batch, int32_t x, i
 }
 
 makcu_error_t makcu_batch_move_bezier(makcu_batch_builder_t* batch, int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x, int32_t ctrl_y) {
-    if (!batch) return MAKCU_ERROR_INVALID_PARAMETER;
+    makcu_error_t validation = validate_batch_builder(batch);
+    if (validation != MAKCU_SUCCESS) return validation;
     try {
         batch->cpp_batch->moveBezier(x, y, segments, ctrl_x, ctrl_y);
         return MAKCU_SUCCESS;
@@ -772,31 +849,47 @@ makcu_error_t makcu_batch_move_bezier(makcu_batch_builder_t* batch, int32_t x, i
 }
 
 makcu_error_t makcu_batch_click(makcu_batch_builder_t* batch, makcu_mouse_button_t button) {
-    if (!batch) return MAKCU_ERROR_INVALID_PARAMETER;
+    makcu_error_t validation = validate_batch_builder(batch);
+    if (validation != MAKCU_SUCCESS) return validation;
     try {
-        batch->cpp_batch->click(convert_mouse_button(button));
+        makcu::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKCU_ERROR_INVALID_PARAMETER;
+        }
+        batch->cpp_batch->click(cpp_button);
         return MAKCU_SUCCESS;
     } catch (...) { return handle_exception(); }
 }
 
 makcu_error_t makcu_batch_press(makcu_batch_builder_t* batch, makcu_mouse_button_t button) {
-    if (!batch) return MAKCU_ERROR_INVALID_PARAMETER;
+    makcu_error_t validation = validate_batch_builder(batch);
+    if (validation != MAKCU_SUCCESS) return validation;
     try {
-        batch->cpp_batch->press(convert_mouse_button(button));
+        makcu::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKCU_ERROR_INVALID_PARAMETER;
+        }
+        batch->cpp_batch->press(cpp_button);
         return MAKCU_SUCCESS;
     } catch (...) { return handle_exception(); }
 }
 
 makcu_error_t makcu_batch_release(makcu_batch_builder_t* batch, makcu_mouse_button_t button) {
-    if (!batch) return MAKCU_ERROR_INVALID_PARAMETER;
+    makcu_error_t validation = validate_batch_builder(batch);
+    if (validation != MAKCU_SUCCESS) return validation;
     try {
-        batch->cpp_batch->release(convert_mouse_button(button));
+        makcu::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKCU_ERROR_INVALID_PARAMETER;
+        }
+        batch->cpp_batch->release(cpp_button);
         return MAKCU_SUCCESS;
     } catch (...) { return handle_exception(); }
 }
 
 makcu_error_t makcu_batch_scroll(makcu_batch_builder_t* batch, int32_t delta) {
-    if (!batch) return MAKCU_ERROR_INVALID_PARAMETER;
+    makcu_error_t validation = validate_batch_builder(batch);
+    if (validation != MAKCU_SUCCESS) return validation;
     try {
         batch->cpp_batch->scroll(delta);
         return MAKCU_SUCCESS;
@@ -804,31 +897,47 @@ makcu_error_t makcu_batch_scroll(makcu_batch_builder_t* batch, int32_t delta) {
 }
 
 makcu_error_t makcu_batch_drag(makcu_batch_builder_t* batch, makcu_mouse_button_t button, int32_t x, int32_t y) {
-    if (!batch) return MAKCU_ERROR_INVALID_PARAMETER;
+    makcu_error_t validation = validate_batch_builder(batch);
+    if (validation != MAKCU_SUCCESS) return validation;
     try {
-        batch->cpp_batch->drag(convert_mouse_button(button), x, y);
+        makcu::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKCU_ERROR_INVALID_PARAMETER;
+        }
+        batch->cpp_batch->drag(cpp_button, x, y);
         return MAKCU_SUCCESS;
     } catch (...) { return handle_exception(); }
 }
 
 makcu_error_t makcu_batch_drag_smooth(makcu_batch_builder_t* batch, makcu_mouse_button_t button, int32_t x, int32_t y, uint32_t segments) {
-    if (!batch) return MAKCU_ERROR_INVALID_PARAMETER;
+    makcu_error_t validation = validate_batch_builder(batch);
+    if (validation != MAKCU_SUCCESS) return validation;
     try {
-        batch->cpp_batch->dragSmooth(convert_mouse_button(button), x, y, segments);
+        makcu::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKCU_ERROR_INVALID_PARAMETER;
+        }
+        batch->cpp_batch->dragSmooth(cpp_button, x, y, segments);
         return MAKCU_SUCCESS;
     } catch (...) { return handle_exception(); }
 }
 
 makcu_error_t makcu_batch_drag_bezier(makcu_batch_builder_t* batch, makcu_mouse_button_t button, int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x, int32_t ctrl_y) {
-    if (!batch) return MAKCU_ERROR_INVALID_PARAMETER;
+    makcu_error_t validation = validate_batch_builder(batch);
+    if (validation != MAKCU_SUCCESS) return validation;
     try {
-        batch->cpp_batch->dragBezier(convert_mouse_button(button), x, y, segments, ctrl_x, ctrl_y);
+        makcu::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKCU_ERROR_INVALID_PARAMETER;
+        }
+        batch->cpp_batch->dragBezier(cpp_button, x, y, segments, ctrl_x, ctrl_y);
         return MAKCU_SUCCESS;
     } catch (...) { return handle_exception(); }
 }
 
 makcu_error_t makcu_batch_execute(makcu_batch_builder_t* batch) {
-    if (!batch) return MAKCU_ERROR_INVALID_PARAMETER;
+    makcu_error_t validation = validate_batch_builder(batch);
+    if (validation != MAKCU_SUCCESS) return validation;
     try {
         bool success = batch->cpp_batch->execute();
         return success ? MAKCU_SUCCESS : MAKCU_ERROR_COMMAND_FAILED;

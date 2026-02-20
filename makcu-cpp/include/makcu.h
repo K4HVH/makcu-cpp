@@ -17,18 +17,6 @@
     #endif
 #endif
 
-#ifndef MAKCU_DEPRECATED
-    #if defined(MAKCU_INTERNAL_BUILD)
-        #define MAKCU_DEPRECATED(message)
-    #else
-        #define MAKCU_DEPRECATED(message) [[deprecated(message)]]
-    #endif
-#endif
-
-#ifndef MAKCU_NODISCARD
-    #define MAKCU_NODISCARD [[nodiscard]]
-#endif
-
 #include <string>
 #include <vector>
 #include <memory>
@@ -148,82 +136,82 @@ namespace makcu {
         static std::string findFirstDevice();
 
         // Connection with async support
-        MAKCU_NODISCARD bool connect(const std::string& port = "");
+        [[nodiscard]] bool connect(const std::string& port = "");
         void disconnect();
-        MAKCU_NODISCARD bool isConnected() const;
-        MAKCU_NODISCARD ConnectionStatus getStatus() const;
+        [[nodiscard]] bool isConnected() const;
+        [[nodiscard]] ConnectionStatus getStatus() const;
 
         // Async connection methods
-        MAKCU_NODISCARD std::future<bool> connectAsync(const std::string& port = "");
-        MAKCU_NODISCARD std::expected<void, ConnectionStatus> connectExpected(const std::string& port = "");
+        [[nodiscard]] std::future<bool> connectAsync(const std::string& port = "");
+        [[nodiscard]] std::expected<void, ConnectionStatus> connectExpected(const std::string& port = "");
 
         // Device info
-        MAKCU_NODISCARD DeviceInfo getDeviceInfo() const;
-        MAKCU_NODISCARD std::string getVersion() const;
-        MAKCU_NODISCARD std::expected<std::string, ConnectionStatus> getVersionExpected() const;
+        [[nodiscard]] DeviceInfo getDeviceInfo() const;
+        [[nodiscard]] std::string getVersion() const;
+        [[nodiscard]] std::expected<std::string, ConnectionStatus> getVersionExpected() const;
 
         // High-performance mouse button control (fire-and-forget)
-        MAKCU_NODISCARD bool mouseDown(MouseButton button);
-        MAKCU_NODISCARD bool mouseUp(MouseButton button);
-        MAKCU_NODISCARD bool click(MouseButton button);  // Combined press+release
+        [[nodiscard]] bool mouseDown(MouseButton button);
+        [[nodiscard]] bool mouseUp(MouseButton button);
+        [[nodiscard]] bool click(MouseButton button);  // Combined press+release
 
 
         // Mouse button state queries (with caching)
-        MAKCU_NODISCARD bool mouseButtonState(MouseButton button);
+        [[nodiscard]] bool mouseButtonState(MouseButton button);
 
         // High-performance movement (fire-and-forget for gaming)
-        MAKCU_NODISCARD bool mouseMove(int32_t x, int32_t y);
-        MAKCU_NODISCARD bool mouseMoveSmooth(int32_t x, int32_t y, uint32_t segments);
-        MAKCU_NODISCARD bool mouseMoveBezier(int32_t x, int32_t y, uint32_t segments,
+        [[nodiscard]] bool mouseMove(int32_t x, int32_t y);
+        [[nodiscard]] bool mouseMoveSmooth(int32_t x, int32_t y, uint32_t segments);
+        [[nodiscard]] bool mouseMoveBezier(int32_t x, int32_t y, uint32_t segments,
             int32_t ctrl_x, int32_t ctrl_y);
 
         // High-performance drag operations
-        MAKCU_NODISCARD bool mouseDrag(MouseButton button, int32_t x, int32_t y);
-        MAKCU_NODISCARD bool mouseDragSmooth(MouseButton button, int32_t x, int32_t y, uint32_t segments = 10);
-        MAKCU_NODISCARD bool mouseDragBezier(MouseButton button, int32_t x, int32_t y, uint32_t segments = 20,
+        [[nodiscard]] bool mouseDrag(MouseButton button, int32_t x, int32_t y);
+        [[nodiscard]] bool mouseDragSmooth(MouseButton button, int32_t x, int32_t y, uint32_t segments = 10);
+        [[nodiscard]] bool mouseDragBezier(MouseButton button, int32_t x, int32_t y, uint32_t segments = 20,
             int32_t ctrl_x = 0, int32_t ctrl_y = 0);
 
 
         // Mouse wheel
-        MAKCU_NODISCARD bool mouseWheel(int32_t delta);
+        [[nodiscard]] bool mouseWheel(int32_t delta);
 
         // Mouse locking with state caching
-        MAKCU_NODISCARD bool lockMouseX(bool lock = true);
-        MAKCU_NODISCARD bool lockMouseY(bool lock = true);
-        MAKCU_NODISCARD bool lockMouseLeft(bool lock = true);
-        MAKCU_NODISCARD bool lockMouseMiddle(bool lock = true);
-        MAKCU_NODISCARD bool lockMouseRight(bool lock = true);
-        MAKCU_NODISCARD bool lockMouseSide1(bool lock = true);
-        MAKCU_NODISCARD bool lockMouseSide2(bool lock = true);
+        [[nodiscard]] bool lockMouseX(bool lock = true);
+        [[nodiscard]] bool lockMouseY(bool lock = true);
+        [[nodiscard]] bool lockMouseLeft(bool lock = true);
+        [[nodiscard]] bool lockMouseMiddle(bool lock = true);
+        [[nodiscard]] bool lockMouseRight(bool lock = true);
+        [[nodiscard]] bool lockMouseSide1(bool lock = true);
+        [[nodiscard]] bool lockMouseSide2(bool lock = true);
 
         // Fast lock state queries (cached)
-        MAKCU_NODISCARD bool isMouseXLocked() const;
-        MAKCU_NODISCARD bool isMouseYLocked() const;
-        MAKCU_NODISCARD bool isMouseLeftLocked() const;
-        MAKCU_NODISCARD bool isMouseMiddleLocked() const;
-        MAKCU_NODISCARD bool isMouseRightLocked() const;
-        MAKCU_NODISCARD bool isMouseSide1Locked() const;
-        MAKCU_NODISCARD bool isMouseSide2Locked() const;
+        [[nodiscard]] bool isMouseXLocked() const;
+        [[nodiscard]] bool isMouseYLocked() const;
+        [[nodiscard]] bool isMouseLeftLocked() const;
+        [[nodiscard]] bool isMouseMiddleLocked() const;
+        [[nodiscard]] bool isMouseRightLocked() const;
+        [[nodiscard]] bool isMouseSide1Locked() const;
+        [[nodiscard]] bool isMouseSide2Locked() const;
 
         // Batch lock state query
-        MAKCU_NODISCARD std::unordered_map<std::string, bool> getAllLockStates() const;
+        [[nodiscard]] std::unordered_map<std::string, bool> getAllLockStates() const;
 
         // Mouse input catching
-        MAKCU_NODISCARD uint8_t catchMouseLeft();
-        MAKCU_NODISCARD uint8_t catchMouseMiddle();
-        MAKCU_NODISCARD uint8_t catchMouseRight();
-        MAKCU_NODISCARD uint8_t catchMouseSide1();
-        MAKCU_NODISCARD uint8_t catchMouseSide2();
+        [[nodiscard]] uint8_t catchMouseLeft();
+        [[nodiscard]] uint8_t catchMouseMiddle();
+        [[nodiscard]] uint8_t catchMouseRight();
+        [[nodiscard]] uint8_t catchMouseSide1();
+        [[nodiscard]] uint8_t catchMouseSide2();
 
         // Button monitoring with optimized processing
-        MAKCU_NODISCARD bool enableButtonMonitoring(bool enable = true);
-        MAKCU_NODISCARD bool isButtonMonitoringEnabled() const;
-        MAKCU_NODISCARD uint8_t getButtonMask() const;
+        [[nodiscard]] bool enableButtonMonitoring(bool enable = true);
+        [[nodiscard]] bool isButtonMonitoringEnabled() const;
+        [[nodiscard]] uint8_t getButtonMask() const;
 
         // Serial spoofing
-        MAKCU_NODISCARD std::string getMouseSerial();
-        MAKCU_NODISCARD bool setMouseSerial(const std::string& serial);
-        MAKCU_NODISCARD bool resetMouseSerial();
+        [[nodiscard]] std::string getMouseSerial();
+        [[nodiscard]] bool setMouseSerial(const std::string& serial);
+        [[nodiscard]] bool resetMouseSerial();
 
 
         // Device control
@@ -238,21 +226,21 @@ namespace makcu {
          * @param validateCommunication Whether to test communication after baud rate change (default: true)
          * @return true if baud rate was successfully changed and verified, false otherwise
          */
-        MAKCU_NODISCARD bool setBaudRate(uint32_t baudRate, bool validateCommunication = true);
+        [[nodiscard]] bool setBaudRate(uint32_t baudRate, bool validateCommunication = true);
 
         // Callbacks
         void setMouseButtonCallback(MouseButtonCallback callback);
         void setConnectionCallback(ConnectionCallback callback);
 
         // High-level automation
-        MAKCU_NODISCARD bool clickSequence(const std::vector<MouseButton>& buttons,
+        [[nodiscard]] bool clickSequence(const std::vector<MouseButton>& buttons,
             std::chrono::milliseconds delay = std::chrono::milliseconds(50));
-        MAKCU_NODISCARD bool movePattern(const std::vector<std::pair<int32_t, int32_t>>& points,
+        [[nodiscard]] bool movePattern(const std::vector<std::pair<int32_t, int32_t>>& points,
             bool smooth = true, uint32_t segments = 10);
 
         // Performance utilities
         void enableHighPerformanceMode(bool enable = true);
-        MAKCU_NODISCARD bool isHighPerformanceModeEnabled() const;
+        [[nodiscard]] bool isHighPerformanceModeEnabled() const;
 
         // Command batching for maximum performance
         class MAKCU_API BatchCommandBuilder {
@@ -269,27 +257,31 @@ namespace makcu {
             BatchCommandBuilder& dragSmooth(MouseButton button, int32_t x, int32_t y, uint32_t segments = 10);
             BatchCommandBuilder& dragBezier(MouseButton button, int32_t x, int32_t y, uint32_t segments = 20,
                 int32_t ctrl_x = 0, int32_t ctrl_y = 0);
-            MAKCU_NODISCARD bool execute();
+            [[nodiscard]] bool execute();
 
         private:
             friend class Device;
-            BatchCommandBuilder(Device* device) : m_device(device) {}
+            BatchCommandBuilder(Device* device, std::shared_ptr<std::atomic<bool>> deviceLifetime)
+                : m_device(device), m_deviceLifetime(std::move(deviceLifetime)) {}
+            [[nodiscard]] bool isDeviceAlive() const;
             Device* m_device;
+            std::shared_ptr<std::atomic<bool>> m_deviceLifetime;
             std::vector<std::string> m_commands;
         };
 
         BatchCommandBuilder createBatch();
 
         // Legacy raw command interface (not recommended for performance)
-        MAKCU_DEPRECATED("Use typed Device methods (mouseMove/click/lock/etc.) instead of raw commands.")
-        MAKCU_NODISCARD bool sendRawCommand(const std::string& command) const;
-        MAKCU_DEPRECATED("Use typed Device methods and callbacks instead of raw response polling.")
-        MAKCU_NODISCARD std::string receiveRawResponse() const;
+        [[deprecated("Use typed Device methods (mouseMove/click/lock/etc.) instead of raw commands.")]]
+        [[nodiscard]] bool sendRawCommand(const std::string& command) const;
+        [[deprecated("Use typed Device methods and callbacks instead of raw response polling.")]]
+        [[nodiscard]] std::string receiveRawResponse() const;
 
     private:
         // Implementation details with caching and optimization
         class Impl;
         std::unique_ptr<Impl> m_impl;
+        std::shared_ptr<std::atomic<bool>> m_lifetimeToken;
 
         // Disable copy
         Device(const Device&) = delete;
@@ -297,8 +289,8 @@ namespace makcu {
     };
 
     // Utility functions
-    MAKCU_NODISCARD MAKCU_API std::string mouseButtonToString(MouseButton button);
-    MAKCU_NODISCARD MAKCU_API MouseButton stringToMouseButton(const std::string& buttonName);
+    [[nodiscard]] MAKCU_API std::string mouseButtonToString(MouseButton button);
+    [[nodiscard]] MAKCU_API MouseButton stringToMouseButton(const std::string& buttonName);
 
     // Performance profiling utilities
     class MAKCU_API PerformanceProfiler {

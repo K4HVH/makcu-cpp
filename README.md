@@ -36,7 +36,7 @@ target_link_libraries(your_app PRIVATE makcu::makcu-cpp)
 Basic C++ usage:
 
 ```cpp
-#include <makcu/makcu.h>
+#include <makcu.h>
 
 makcu::Device device;
 device.connect();
@@ -49,7 +49,7 @@ device.click(makcu::MouseButton::LEFT);
 The library includes a complete C ABI for easy integration with Python, Rust, Go, C#, and other languages:
 
 ```c
-#include <makcu/makcu.h>
+#include <makcu_c.h>
 
 makcu_device_t* device = makcu_device_create();
 makcu_connect(device, "");

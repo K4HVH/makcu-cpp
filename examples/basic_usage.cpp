@@ -21,11 +21,26 @@ int main() {
         std::cout << "Firmware version: " << device.getVersion() << "\n";
 
         // Basic mouse operations
-        device.mouseMove(100, 0);    // Move right
-        device.mouseMove(-100, 0);   // Move back left
-        device.click(makcu::MouseButton::LEFT);  // Single click
-        device.mouseWheel(3);        // Scroll up
-        device.mouseWheel(-3);       // Scroll down
+        if (!device.mouseMove(100, 0)) {
+            std::cout << "mouseMove(100,0) failed\n";
+            return 1;
+        }
+        if (!device.mouseMove(-100, 0)) {
+            std::cout << "mouseMove(-100,0) failed\n";
+            return 1;
+        }
+        if (!device.click(makcu::MouseButton::LEFT)) {
+            std::cout << "click(LEFT) failed\n";
+            return 1;
+        }
+        if (!device.mouseWheel(3)) {
+            std::cout << "mouseWheel(3) failed\n";
+            return 1;
+        }
+        if (!device.mouseWheel(-3)) {
+            std::cout << "mouseWheel(-3) failed\n";
+            return 1;
+        }
 
         device.disconnect();
         std::cout << "Demo completed successfully!\n";

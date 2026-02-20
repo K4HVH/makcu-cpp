@@ -17,18 +17,6 @@
     #endif
 #endif
 
-#ifndef MAKCU_DEPRECATED
-    #if defined(MAKCU_INTERNAL_BUILD)
-        #define MAKCU_DEPRECATED(message)
-    #else
-        #define MAKCU_DEPRECATED(message) [[deprecated(message)]]
-    #endif
-#endif
-
-#ifndef MAKCU_NODISCARD
-    #define MAKCU_NODISCARD [[nodiscard]]
-#endif
-
 #include <string>
 #include <vector>
 #include <atomic>
@@ -78,43 +66,43 @@ namespace makcu {
         SerialPort();
         ~SerialPort();
 
-        MAKCU_NODISCARD bool open(const std::string& port, uint32_t baudRate);
+        [[nodiscard]] bool open(const std::string& port, uint32_t baudRate);
         void close();
-        MAKCU_NODISCARD bool isOpen() const;
-        MAKCU_NODISCARD bool isActuallyConnected() const;
+        [[nodiscard]] bool isOpen() const;
+        [[nodiscard]] bool isActuallyConnected() const;
 
-        MAKCU_NODISCARD bool setBaudRate(uint32_t baudRate);
-        MAKCU_NODISCARD uint32_t getBaudRate() const;
-        MAKCU_NODISCARD std::string getPortName() const;
+        [[nodiscard]] bool setBaudRate(uint32_t baudRate);
+        [[nodiscard]] uint32_t getBaudRate() const;
+        [[nodiscard]] std::string getPortName() const;
 
         // High-performance command execution with tracking
-        MAKCU_NODISCARD std::future<std::string> sendTrackedCommand(const std::string& command,
+        [[nodiscard]] std::future<std::string> sendTrackedCommand(const std::string& command,
             bool expectResponse = false,
             std::chrono::milliseconds timeout = std::chrono::milliseconds(100));
 
         // Fast fire-and-forget commands
-        MAKCU_NODISCARD bool sendCommand(const std::string& command);
+        [[nodiscard]] bool sendCommand(const std::string& command);
 
         // Legacy methods for compatibility
-        MAKCU_NODISCARD bool write(std::span<const uint8_t> data);
-        MAKCU_NODISCARD bool write(const std::vector<uint8_t>& data);
-        MAKCU_DEPRECATED("Use sendCommand() for text commands.")
-        MAKCU_NODISCARD bool write(const std::string& data);
-        MAKCU_DEPRECATED("Use tracked commands and callbacks instead of synchronous reads.")
-        MAKCU_NODISCARD std::vector<uint8_t> read(size_t maxBytes = 1024);
-        MAKCU_DEPRECATED("Use tracked commands and callbacks instead of synchronous reads.")
-        MAKCU_NODISCARD std::string readString(size_t maxBytes = 1024);
+        [[nodiscard]] bool write(std::span<const uint8_t> data);
+        [[nodiscard]] bool write(const std::vector<uint8_t>& data);
+        [[deprecated("Use sendCommand() for text commands.")]]
+        [[nodiscard]] bool write(const std::string& data);
+        [[deprecated("Use tracked commands and callbacks instead of synchronous reads.")]]
+        [[nodiscard]] std::vector<uint8_t> read(size_t maxBytes = 1024);
+        [[deprecated("Use tracked commands and callbacks instead of synchronous reads.")]]
+        [[nodiscard]] std::string readString(size_t maxBytes = 1024);
 
-        MAKCU_NODISCARD size_t available() const;
-        MAKCU_NODISCARD bool flush();
+        [[nodiscard]] size_t available() const;
+        [[nodiscard]] bool flush();
 
         // Optimized timeout control
         void setTimeout(uint32_t timeoutMs);
-        MAKCU_NODISCARD uint32_t getTimeout() const;
+        [[nodiscard]] uint32_t getTimeout() const;
 
         // Port enumeration
-        static MAKCU_NODISCARD std::vector<std::string> getAvailablePorts();
-        static MAKCU_NODISCARD std::vector<std::string> findMakcuPorts();
+        [[nodiscard]] static std::vector<std::string> getAvailablePorts();
+        [[nodiscard]] static std::vector<std::string> findMakcuPorts();
 
         // Button callback support
         using ButtonCallback = std::function<void(uint8_t, bool)>;
