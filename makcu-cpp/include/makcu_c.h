@@ -39,7 +39,8 @@ typedef enum {
     MAKCU_MOUSE_RIGHT = 1,
     MAKCU_MOUSE_MIDDLE = 2,
     MAKCU_MOUSE_SIDE1 = 3,
-    MAKCU_MOUSE_SIDE2 = 4
+    MAKCU_MOUSE_SIDE2 = 4,
+    MAKCU_MOUSE_UNKNOWN = 255
 } makcu_mouse_button_t;
 
 typedef enum {

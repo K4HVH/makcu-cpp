@@ -1,19 +1,23 @@
-cmake_minimum_required(VERSION 3.15)
-project(makcu-cpp VERSION 1.3.4 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.20)
+project(makcu-cpp VERSION 1.3.5 LANGUAGES CXX)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Build type options
 option(BUILD_SHARED_ONLY "Build only shared library" OFF)
 option(BUILD_STATIC_ONLY "Build only static library" OFF)
+option(MAKCU_ENABLE_NATIVE_OPTIMIZATIONS "Enable CPU-specific optimizations (-march=native)" OFF)
 
 # Compiler-specific optimizations
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
     set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra")
+    if(MAKCU_ENABLE_NATIVE_OPTIMIZATIONS)
+        string(APPEND CMAKE_CXX_FLAGS_RELEASE " -march=native")
+    endif()
 elseif(MSVC)
     set(CMAKE_CXX_FLAGS_RELEASE "/O2 /DNDEBUG")
     set(CMAKE_CXX_FLAGS_DEBUG "/Od /Zi /Wall")
@@ -60,6 +64,12 @@ if(NOT BUILD_STATIC_ONLY)
         SOVERSION 1
         PUBLIC_HEADER "${PUBLIC_HEADERS}"
     )
+    if(WIN32)
+        # Avoid .lib name collision with the static library on Windows.
+        set_target_properties(${PROJECT_NAME}_shared PROPERTIES
+            ARCHIVE_OUTPUT_NAME "${PROJECT_NAME}_import"
+        )
+    endif()
     list(APPEND LIBRARY_TARGETS ${PROJECT_NAME}_shared)
 endif()
 
@@ -89,7 +99,6 @@ foreach(target ${LIBRARY_TARGETS})
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/makcu-cpp/include>
             $<INSTALL_INTERFACE:include/makcu>
     )
-
     # Link libraries
     target_link_libraries(${target} PUBLIC Threads::Threads)
 
@@ -116,7 +125,6 @@ foreach(target ${LIBRARY_TARGETS})
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
 endforeach()
-
 
 # Install targets
 install(TARGETS ${LIBRARY_TARGETS}

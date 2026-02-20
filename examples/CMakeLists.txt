@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(makcu-examples)
 
 # Try to find makcu-cpp package first (if installed)
@@ -26,7 +26,7 @@ if(NOT makcu-cpp_FOUND)
 endif()
 
 # C++ standard
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # C standard for C API test

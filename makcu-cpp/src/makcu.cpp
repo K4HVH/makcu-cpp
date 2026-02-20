@@ -5,13 +5,90 @@
 #include <thread>
 #include <chrono>
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cctype>
 #include <atomic>
 #include <mutex>
 #include <unordered_map>
 #include <condition_variable>
+#include <limits>
+#include <optional>
+#include <string_view>
+#include <utility>
 
 namespace makcu {
+
+    namespace {
+        bool equalsIgnoreAsciiCase(std::string_view lhs, std::string_view rhs) {
+            if (lhs.size() != rhs.size()) {
+                return false;
+            }
+
+            for (size_t i = 0; i < lhs.size(); ++i) {
+                if (std::toupper(static_cast<unsigned char>(lhs[i])) !=
+                    std::toupper(static_cast<unsigned char>(rhs[i]))) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        std::optional<uint8_t> parseUint8Decimal(std::string_view valueText) {
+            int parsedValue = 0;
+            const char* begin = valueText.data();
+            const char* end = begin + valueText.size();
+            const auto [parseEnd, parseErr] = std::from_chars(begin, end, parsedValue);
+            if (parseErr != std::errc{} || parseEnd != end) {
+                return std::nullopt;
+            }
+
+            if (parsedValue < 0 || parsedValue > (std::numeric_limits<uint8_t>::max)()) {
+                return std::nullopt;
+            }
+
+            return static_cast<uint8_t>(parsedValue);
+        }
+
+        std::string escapeSingleQuotedCommandString(std::string_view value) {
+            constexpr char HEX_DIGITS[] = "0123456789ABCDEF";
+
+            std::string escaped;
+            escaped.reserve(value.size());
+
+            for (const unsigned char ch : value) {
+                switch (ch) {
+                case '\\':
+                    escaped += "\\\\";
+                    break;
+                case '\'':
+                    escaped += "\\'";
+                    break;
+                case '\n':
+                    escaped += "\\n";
+                    break;
+                case '\r':
+                    escaped += "\\r";
+                    break;
+                case '\t':
+                    escaped += "\\t";
+                    break;
+                default:
+                    if (std::iscntrl(ch)) {
+                        escaped += "\\x";
+                        escaped += HEX_DIGITS[(ch >> 4) & 0x0F];
+                        escaped += HEX_DIGITS[ch & 0x0F];
+                    } else {
+                        escaped.push_back(static_cast<char>(ch));
+                    }
+                    break;
+                }
+            }
+
+            return escaped;
+        }
+    } // namespace
 
     // Constants
     constexpr uint16_t MAKCU_VID = 0x1A86;
@@ -101,6 +178,7 @@ namespace makcu {
         // Callbacks
         Device::MouseButtonCallback mouseButtonCallback;
         Device::ConnectionCallback connectionCallback;
+        mutable std::mutex callbackMutex;
 
         // Pre-allocated string buffers for different command types
         mutable std::string moveCommandBuffer;
@@ -111,39 +189,38 @@ namespace makcu {
         mutable std::mutex commandBufferMutex;
 
         // Connection monitoring
-        std::thread monitoringThread;
-        std::atomic<bool> stopMonitoring{false};
+        std::jthread monitoringThread;
         std::condition_variable monitoringCondition;
         std::mutex monitoringMutex;
+
+        enum class LockTarget : uint8_t {
+            X = 0,
+            Y = 1,
+            LEFT = 2,
+            RIGHT = 3,
+            MIDDLE = 4,
+            SIDE1 = 5,
+            SIDE2 = 6
+        };
         
-        // Safe thread cleanup with timeout protection
+        // Safe thread cleanup
         void cleanupMonitoringThread() {
             if (!monitoringThread.joinable()) {
                 return;
             }
-            
-            // Signal thread to stop with memory barrier
-            stopMonitoring.store(true, std::memory_order_release);
-            
-            // Wake up the monitoring thread immediately
-            {
-                std::lock_guard<std::mutex> lock(monitoringMutex);
-                monitoringCondition.notify_all();
-            }
-            
-            // Wait for thread to exit with timeout to prevent indefinite blocking
-            auto future = std::async(std::launch::async, [this]() {
-                monitoringThread.join();
-            });
-            
-            if (future.wait_for(std::chrono::milliseconds(2000)) == std::future_status::timeout) {
-                // Thread didn't exit cleanly within timeout
-                // This shouldn't happen with proper condition variable signaling, but handle it
-                #ifdef DEBUG
-                std::cerr << "Warning: Monitoring thread cleanup timeout, detaching thread" << std::endl;
-                #endif
+
+            monitoringThread.request_stop();
+
+            // Wake up the monitoring thread immediately.
+            monitoringCondition.notify_all();
+
+            if (std::this_thread::get_id() == monitoringThread.get_id()) {
+                // Avoid self-join if disconnect is triggered from monitoring callback context.
                 monitoringThread.detach();
+                return;
             }
+
+            monitoringThread.join();
         }
 
         Impl() : serialPort(std::make_unique<SerialPort>())
@@ -231,35 +308,54 @@ namespace makcu {
             currentButtonMask.store(currentMask);
 
             // Call user callback if set
-            if (mouseButtonCallback && button < 5) {
-                MouseButton mouseBtn = static_cast<MouseButton>(button);
-                try {
-                    mouseButtonCallback(mouseBtn, pressed);
-                }
-                catch (...) {
-                    // Ignore callback exceptions
-                }
+            if (button >= 5) {
+                return;
+            }
+
+            Device::MouseButtonCallback callbackCopy;
+            {
+                std::lock_guard<std::mutex> lock(callbackMutex);
+                callbackCopy = mouseButtonCallback;
+            }
+
+            if (!callbackCopy) {
+                return;
+            }
+
+            const MouseButton mouseBtn = static_cast<MouseButton>(button);
+            try {
+                callbackCopy(mouseBtn, pressed);
+            }
+            catch (...) {
+                // Ignore callback exceptions.
             }
         }
 
         void notifyConnectionChange(bool isConnected) {
-            if (connectionCallback) {
-                try {
-                    connectionCallback(isConnected);
-                }
-                catch (...) {
-                    // Disable callback after exception to prevent spam
-                    connectionCallback = nullptr;
-                }
+            Device::ConnectionCallback callbackCopy;
+            {
+                std::lock_guard<std::mutex> lock(callbackMutex);
+                callbackCopy = connectionCallback;
+            }
+
+            if (!callbackCopy) {
+                return;
+            }
+
+            try {
+                callbackCopy(isConnected);
+            }
+            catch (...) {
+                // Ignore callback exceptions.
             }
         }
 
-        void connectionMonitoringLoop() {
+        void connectionMonitoringLoop(std::stop_token stopToken) {
             int pollInterval = 150;
             const int maxPollInterval = 500;
             const int pollIncrement = 50;
             
-            while (!stopMonitoring.load(std::memory_order_acquire)) {
+            while (!stopToken.stop_requested()) {
                 // Double-check connection state with acquire semantics to ensure we see all updates
                 bool currentlyConnected = connected.load(std::memory_order_acquire);
                 if (!currentlyConnected) {
@@ -278,8 +374,6 @@ namespace makcu {
                         // We successfully changed from connected to disconnected
                         // Now update all other state atomically
                         atomicStatus.store(ConnectionStatus::DISCONNECTED, std::memory_order_release);
-                        status = ConnectionStatus::DISCONNECTED;
-                        deviceInfo.isConnected = false;
                         currentButtonMask.store(0, std::memory_order_release);
                         lockStateCacheValid.store(false, std::memory_order_release);
                         buttonMonitoringEnabled.store(false, std::memory_order_release);
@@ -295,7 +389,7 @@ namespace makcu {
                 // Use condition variable for interruptible sleep with exponential backoff
                 std::unique_lock<std::mutex> lock(monitoringMutex);
                 if (monitoringCondition.wait_for(lock, std::chrono::milliseconds(pollInterval),
-                    [this] { return stopMonitoring.load(std::memory_order_acquire); })) {
+                    [&stopToken] { return stopToken.stop_requested(); })) {
                     // Condition was signaled (stop requested)
                     break;
                 }
@@ -439,49 +533,42 @@ namespace makcu {
             return executeCommand(wheelCommandBuffer);
         }
 
-        // Cache-based lock state management
-        void updateLockStateCache(const std::string& target, bool locked) {
-            static const std::unordered_map<std::string, int> lockBitMap = {
-                {"X", 0}, {"Y", 1}, {"LEFT", 2}, {"RIGHT", 3},
-                {"MIDDLE", 4}, {"SIDE1", 5}, {"SIDE2", 6}
-            };
-
-            auto it = lockBitMap.find(target);
-            if (it != lockBitMap.end()) {
-                uint16_t cache = lockStateCache.load();
-                if (locked) {
-                    cache |= (1 << it->second);
-                }
-                else {
-                    cache &= ~(1 << it->second);
-                }
-                lockStateCache.store(cache);
-                lockStateCacheValid.store(true);
-            }
+        static constexpr uint16_t lockBit(LockTarget target) {
+            return static_cast<uint16_t>(1u << std::to_underlying(target));
         }
 
-        bool getLockStateFromCache(const std::string& target) const {
-            static const std::unordered_map<std::string, int> lockBitMap = {
-                {"X", 0}, {"Y", 1}, {"LEFT", 2}, {"RIGHT", 3},
-                {"MIDDLE", 4}, {"SIDE1", 5}, {"SIDE2", 6}
-            };
+        // Cache-based lock state management
+        void updateLockStateCache(LockTarget target, bool locked) {
+            uint16_t cache = lockStateCache.load(std::memory_order_acquire);
+            const uint16_t bit = lockBit(target);
+            if (locked) {
+                cache = static_cast<uint16_t>(cache | bit);
+            }
+            else {
+                cache = static_cast<uint16_t>(cache & ~bit);
+            }
+            lockStateCache.store(cache, std::memory_order_release);
+            lockStateCacheValid.store(true, std::memory_order_release);
+        }
 
-            if (!lockStateCacheValid.load()) {
+        bool getLockStateFromCache(LockTarget target) const {
+            if (!lockStateCacheValid.load(std::memory_order_acquire)) {
                 return false; // Cache invalid
             }
 
-            auto it = lockBitMap.find(target);
-            if (it != lockBitMap.end()) {
-                return (lockStateCache.load() & (1 << it->second)) != 0;
-            }
-            return false;
+            return (lockStateCache.load(std::memory_order_acquire) & lockBit(target)) != 0;
         }
     };
 
     // Device implementation
-    Device::Device() : m_impl(std::make_unique<Impl>()) {}
+    Device::Device()
+        : m_impl(std::make_unique<Impl>())
+        , m_lifetimeToken(std::make_shared<std::atomic<bool>>(true)) {}
 
     Device::~Device() {
+        if (m_lifetimeToken) {
+            m_lifetimeToken->store(false, std::memory_order_release);
+        }
         disconnect();
     }
 
@@ -508,7 +595,7 @@ namespace makcu {
     }
 
     bool Device::connect(const std::string& port) {
-        std::lock_guard<std::mutex> lock(m_impl->mutex);
+        std::unique_lock<std::mutex> lock(m_impl->mutex);
 
         if (m_impl->connected.load()) {
             return true;
@@ -517,14 +604,17 @@ namespace makcu {
         std::string targetPort = port.empty() ? findFirstDevice() : port;
         if (targetPort.empty()) {
             m_impl->status = ConnectionStatus::CONNECTION_ERROR;
+            m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             return false;
         }
 
         m_impl->status = ConnectionStatus::CONNECTING;
+        m_impl->atomicStatus.store(ConnectionStatus::CONNECTING, std::memory_order_release);
 
         // Open at initial baud rate
         if (!m_impl->serialPort->open(targetPort, INITIAL_BAUD_RATE)) {
             m_impl->status = ConnectionStatus::CONNECTION_ERROR;
+            m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             return false;
         }
 
@@ -590,9 +680,9 @@ namespace makcu {
         m_impl->deviceInfo.isConnected = true;
 
         // Atomically update all connection state before starting monitoring thread
-        m_impl->stopMonitoring.store(false, std::memory_order_release);
         m_impl->atomicStatus.store(ConnectionStatus::CONNECTED, std::memory_order_release);
         m_impl->status = ConnectionStatus::CONNECTED;
+        m_impl->buttonMonitoringEnabled.store(true, std::memory_order_release);
         
         // Use acquire-release semantics to ensure all state is visible before connected flag is set
         std::atomic_thread_fence(std::memory_order_release);
@@ -601,8 +691,10 @@ namespace makcu {
         // Start connection monitoring thread AFTER all state is established
         // This prevents the monitoring thread from seeing inconsistent state
         try {
-            m_impl->monitoringThread = std::thread(&Impl::connectionMonitoringLoop, m_impl.get());
-        } catch (const std::system_error& e) {
+            m_impl->monitoringThread = std::jthread([impl = m_impl.get()](std::stop_token stopToken) {
+                impl->connectionMonitoringLoop(stopToken);
+            });
+        } catch (const std::system_error&) {
             // Thread creation failed - cleanup and return error
             m_impl->connected.store(false, std::memory_order_release);
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
@@ -611,7 +703,8 @@ namespace makcu {
             m_impl->serialPort->close();
             return false;
         }
-        
+
+        lock.unlock();
         m_impl->notifyConnectionChange(true);
 
         return true;
@@ -633,37 +726,47 @@ namespace makcu {
         });
     }
 
+    std::expected<void, ConnectionStatus> Device::connectExpected(const std::string& port) {
+        if (connect(port)) {
+            return {};
+        }
+
+        return std::unexpected(getStatus());
+    }
+
     void Device::disconnect() {
-        std::lock_guard<std::mutex> lock(m_impl->mutex);
+        bool shouldNotify = false;
+        {
+            std::unique_lock<std::mutex> lock(m_impl->mutex);
 
-        // Always clean up monitoring thread first, regardless of connection state
-        m_impl->cleanupMonitoringThread();
+            // Always clean up monitoring thread first, regardless of connection state.
+            m_impl->cleanupMonitoringThread();
 
-        // Use compare_exchange to prevent race conditions with monitoring thread
-        bool expectedConnected = true;
-        if (!m_impl->connected.compare_exchange_strong(expectedConnected, false, std::memory_order_acq_rel)) {
-            // Already disconnected by another thread (likely monitoring thread)
-            return;
+            // Use compare_exchange to prevent race conditions with monitoring thread.
+            bool expectedConnected = true;
+            shouldNotify = m_impl->connected.compare_exchange_strong(
+                expectedConnected, false, std::memory_order_acq_rel);
+
+            // Ensure all disconnected state is consistent even if another thread
+            // already marked the connection as down.
+            m_impl->atomicStatus.store(ConnectionStatus::DISCONNECTED, std::memory_order_release);
+
+            // Always close the serial port if it is still open.
+            if (m_impl->serialPort->isOpen()) {
+                m_impl->serialPort->close();
+            }
+
+            // Update remaining state after serial port is closed.
+            m_impl->status = ConnectionStatus::DISCONNECTED;
+            m_impl->deviceInfo.isConnected = false;
+            m_impl->currentButtonMask.store(0, std::memory_order_release);
+            m_impl->lockStateCacheValid.store(false, std::memory_order_release);
+            m_impl->buttonMonitoringEnabled.store(false, std::memory_order_release);
         }
 
-        // We successfully changed from connected to disconnected
-        // Update atomic status immediately
-        m_impl->atomicStatus.store(ConnectionStatus::DISCONNECTED, std::memory_order_release);
-
-        // Close the serial port
-        if (m_impl->serialPort->isOpen()) {
-            m_impl->serialPort->close();
+        if (shouldNotify) {
+            m_impl->notifyConnectionChange(false);
         }
-
-        // Update remaining state after serial port is closed
-        m_impl->status = ConnectionStatus::DISCONNECTED;
-        m_impl->deviceInfo.isConnected = false;
-        m_impl->currentButtonMask.store(0, std::memory_order_release);
-        m_impl->lockStateCacheValid.store(false, std::memory_order_release);
-        m_impl->buttonMonitoringEnabled.store(false, std::memory_order_release);
-        
-        // Notify after all state is updated
-        m_impl->notifyConnectionChange(false);
     }
 
 
@@ -676,7 +779,10 @@ namespace makcu {
     }
 
     DeviceInfo Device::getDeviceInfo() const {
-        return m_impl->deviceInfo;
+        std::lock_guard<std::mutex> lock(m_impl->mutex);
+        DeviceInfo info = m_impl->deviceInfo;
+        info.isConnected = m_impl->connected.load(std::memory_order_acquire);
+        return info;
     }
 
     std::string Device::getVersion() const {
@@ -684,17 +790,47 @@ namespace makcu {
             return "";
         }
 
-        // Small delay to ensure any pending responses are cleared
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        
-        auto future = m_impl->serialPort->sendTrackedCommand("km.version()", true,
-            std::chrono::milliseconds(50));
-        try {
-            return future.get();
+        // Retry with escalating timeouts to tolerate temporary instability
+        // immediately after a baud-rate transition.
+        constexpr std::array<std::chrono::milliseconds, 3> timeouts = {
+            std::chrono::milliseconds(75),
+            std::chrono::milliseconds(150),
+            std::chrono::milliseconds(300)
+        };
+
+        for (size_t attempt = 0; attempt < timeouts.size(); ++attempt) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(attempt == 0 ? 10 : 20));
+
+            auto future = m_impl->serialPort->sendTrackedCommand("km.version()", true, timeouts[attempt]);
+            try {
+                std::string version = future.get();
+                if (!version.empty()) {
+                    return version;
+                }
+            }
+            catch (...) {
+                // Continue retry loop.
+            }
+
+            if (!m_impl->connected.load(std::memory_order_acquire)) {
+                return "";
+            }
         }
-        catch (...) {
-            return "";
+
+        return "";
+    }
+
+    std::expected<std::string, ConnectionStatus> Device::getVersionExpected() const {
+        if (!m_impl->connected.load(std::memory_order_acquire)) {
+            return std::unexpected(ConnectionStatus::DISCONNECTED);
         }
+
+        const std::string version = getVersion();
+        if (version.empty()) {
+            return std::unexpected(getStatus());
+        }
+
+        return version;
     }
 
 
@@ -752,7 +888,7 @@ namespace makcu {
 
         // Use cached button state for performance
         uint8_t mask = m_impl->currentButtonMask.load();
-        return (mask & (1 << static_cast<uint8_t>(button))) != 0;
+        return (mask & (1u << std::to_underlying(button))) != 0;
     }
 
 
@@ -876,7 +1012,7 @@ namespace makcu {
 
         bool result = m_impl->executeCommand(command);
         if (result) {
-            m_impl->updateLockStateCache("X", lock);
+            m_impl->updateLockStateCache(Impl::LockTarget::X, lock);
         }
         return result;
     }
@@ -890,7 +1026,7 @@ namespace makcu {
 
         bool result = m_impl->executeCommand(command);
         if (result) {
-            m_impl->updateLockStateCache("Y", lock);
+            m_impl->updateLockStateCache(Impl::LockTarget::Y, lock);
         }
         return result;
     }
@@ -904,7 +1040,7 @@ namespace makcu {
 
         bool result = m_impl->executeCommand(command);
         if (result) {
-            m_impl->updateLockStateCache("LEFT", lock);
+            m_impl->updateLockStateCache(Impl::LockTarget::LEFT, lock);
         }
         return result;
     }
@@ -918,7 +1054,7 @@ namespace makcu {
 
         bool result = m_impl->executeCommand(command);
         if (result) {
-            m_impl->updateLockStateCache("MIDDLE", lock);
+            m_impl->updateLockStateCache(Impl::LockTarget::MIDDLE, lock);
         }
         return result;
     }
@@ -932,7 +1068,7 @@ namespace makcu {
 
         bool result = m_impl->executeCommand(command);
         if (result) {
-            m_impl->updateLockStateCache("RIGHT", lock);
+            m_impl->updateLockStateCache(Impl::LockTarget::RIGHT, lock);
         }
         return result;
     }
@@ -946,7 +1082,7 @@ namespace makcu {
 
         bool result = m_impl->executeCommand(command);
         if (result) {
-            m_impl->updateLockStateCache("SIDE1", lock);
+            m_impl->updateLockStateCache(Impl::LockTarget::SIDE1, lock);
         }
         return result;
     }
@@ -960,38 +1096,38 @@ namespace makcu {
 
         bool result = m_impl->executeCommand(command);
         if (result) {
-            m_impl->updateLockStateCache("SIDE2", lock);
+            m_impl->updateLockStateCache(Impl::LockTarget::SIDE2, lock);
         }
         return result;
     }
 
     // Fast cached lock state queries
     bool Device::isMouseXLocked() const {
-        return m_impl->getLockStateFromCache("X");
+        return m_impl->getLockStateFromCache(Impl::LockTarget::X);
     }
 
     bool Device::isMouseYLocked() const {
-        return m_impl->getLockStateFromCache("Y");
+        return m_impl->getLockStateFromCache(Impl::LockTarget::Y);
     }
 
     bool Device::isMouseLeftLocked() const {
-        return m_impl->getLockStateFromCache("LEFT");
+        return m_impl->getLockStateFromCache(Impl::LockTarget::LEFT);
     }
 
     bool Device::isMouseMiddleLocked() const {
-        return m_impl->getLockStateFromCache("MIDDLE");
+        return m_impl->getLockStateFromCache(Impl::LockTarget::MIDDLE);
     }
 
     bool Device::isMouseRightLocked() const {
-        return m_impl->getLockStateFromCache("RIGHT");
+        return m_impl->getLockStateFromCache(Impl::LockTarget::RIGHT);
     }
 
     bool Device::isMouseSide1Locked() const {
-        return m_impl->getLockStateFromCache("SIDE1");
+        return m_impl->getLockStateFromCache(Impl::LockTarget::SIDE1);
     }
 
     bool Device::isMouseSide2Locked() const {
-        return m_impl->getLockStateFromCache("SIDE2");
+        return m_impl->getLockStateFromCache(Impl::LockTarget::SIDE2);
     }
 
     std::unordered_map<std::string, bool> Device::getAllLockStates() const {
@@ -1013,8 +1149,9 @@ namespace makcu {
         auto future = m_impl->serialPort->sendTrackedCommand("km.catch_ml()", true,
             std::chrono::milliseconds(50));
         try {
-            std::string response = future.get();
-            return static_cast<uint8_t>(std::stoi(response));
+            const std::string response = future.get();
+            const auto parsed = parseUint8Decimal(response);
+            return parsed.value_or(0);
         }
         catch (...) {
             return 0;
@@ -1027,8 +1164,9 @@ namespace makcu {
         auto future = m_impl->serialPort->sendTrackedCommand("km.catch_mm()", true,
             std::chrono::milliseconds(50));
         try {
-            std::string response = future.get();
-            return static_cast<uint8_t>(std::stoi(response));
+            const std::string response = future.get();
+            const auto parsed = parseUint8Decimal(response);
+            return parsed.value_or(0);
         }
         catch (...) {
             return 0;
@@ -1041,8 +1179,9 @@ namespace makcu {
         auto future = m_impl->serialPort->sendTrackedCommand("km.catch_mr()", true,
             std::chrono::milliseconds(50));
         try {
-            std::string response = future.get();
-            return static_cast<uint8_t>(std::stoi(response));
+            const std::string response = future.get();
+            const auto parsed = parseUint8Decimal(response);
+            return parsed.value_or(0);
         }
         catch (...) {
             return 0;
@@ -1055,8 +1194,9 @@ namespace makcu {
         auto future = m_impl->serialPort->sendTrackedCommand("km.catch_ms1()", true,
             std::chrono::milliseconds(50));
         try {
-            std::string response = future.get();
-            return static_cast<uint8_t>(std::stoi(response));
+            const std::string response = future.get();
+            const auto parsed = parseUint8Decimal(response);
+            return parsed.value_or(0);
         }
         catch (...) {
             return 0;
@@ -1069,8 +1209,9 @@ namespace makcu {
         auto future = m_impl->serialPort->sendTrackedCommand("km.catch_ms2()", true,
             std::chrono::milliseconds(50));
         try {
-            std::string response = future.get();
-            return static_cast<uint8_t>(std::stoi(response));
+            const std::string response = future.get();
+            const auto parsed = parseUint8Decimal(response);
+            return parsed.value_or(0);
         }
         catch (...) {
             return 0;
@@ -1119,7 +1260,9 @@ namespace makcu {
     bool Device::setMouseSerial(const std::string& serial) {
         if (!m_impl->connected.load()) return false;
 
-        std::string command = "km.serial('" + serial + "')";
+        std::string command = "km.serial('";
+        command += escapeSingleQuotedCommandString(serial);
+        command += "')";
         return m_impl->executeCommand(command);
     }
 
@@ -1144,6 +1287,7 @@ namespace makcu {
 
         // Use the static helper method for the core baud rate change
         if (!Impl::performBaudRateChange(m_impl->serialPort.get(), baudRate)) {
+            disconnect();
             return false;
         }
 
@@ -1157,13 +1301,21 @@ namespace makcu {
                 if (response.find("km.MAKCU") != std::string::npos) {
                     return true;
                 } else {
-                    // Communication test failed, reconnect at 115200 baud rate
-                    setBaudRate(115200, false);  // Recursive call without validation to avoid infinite loop
+                    // Communication test failed, attempt recovery to known-safe default speed.
+                    bool recovered = (baudRate != 115200) &&
+                        Impl::performBaudRateChange(m_impl->serialPort.get(), 115200);
+                    if (!recovered) {
+                        disconnect();
+                    }
                     return false;
                 }
             } catch (...) {
-                // Exception occurred, reconnect at 115200 baud rate
-                setBaudRate(115200, false);  // Recursive call without validation to avoid infinite loop
+                // Exception occurred, attempt recovery to known-safe default speed.
+                bool recovered = (baudRate != 115200) &&
+                    Impl::performBaudRateChange(m_impl->serialPort.get(), 115200);
+                if (!recovered) {
+                    disconnect();
+                }
                 return false;
             }
         }
@@ -1172,11 +1324,13 @@ namespace makcu {
     }
 
     void Device::setMouseButtonCallback(MouseButtonCallback callback) {
-        m_impl->mouseButtonCallback = callback;
+        std::lock_guard<std::mutex> lock(m_impl->callbackMutex);
+        m_impl->mouseButtonCallback = std::move(callback);
     }
 
     void Device::setConnectionCallback(ConnectionCallback callback) {
-        m_impl->connectionCallback = callback;
+        std::lock_guard<std::mutex> lock(m_impl->callbackMutex);
+        m_impl->connectionCallback = std::move(callback);
     }
 
     // High-level automation methods
@@ -1229,27 +1383,45 @@ namespace makcu {
 
     // Batch command builder implementation
     Device::BatchCommandBuilder Device::createBatch() {
-        return BatchCommandBuilder(this);
+        return BatchCommandBuilder(this, m_lifetimeToken);
+    }
+
+    bool Device::BatchCommandBuilder::isDeviceAlive() const {
+        return m_device != nullptr &&
+               m_deviceLifetime &&
+               m_deviceLifetime->load(std::memory_order_acquire);
     }
 
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::move(int32_t x, int32_t y) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
         m_commands.push_back("km.move(" + std::to_string(x) + "," + std::to_string(y) + ")");
         return *this;
     }
 
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::moveSmooth(int32_t x, int32_t y, uint32_t segments) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
         m_commands.push_back("km.move(" + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(segments) + ")");
         return *this;
     }
 
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::moveBezier(int32_t x, int32_t y, uint32_t segments,
         int32_t ctrl_x, int32_t ctrl_y) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
         m_commands.push_back("km.move(" + std::to_string(x) + "," + std::to_string(y) + "," +
             std::to_string(segments) + "," + std::to_string(ctrl_x) + "," + std::to_string(ctrl_y) + ")");
         return *this;
     }
 
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::click(MouseButton button) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
         auto& cache = m_device->m_impl->commandCache;
         auto pressIt = cache.press_commands.find(button);
         auto releaseIt = cache.release_commands.find(button);
@@ -1262,6 +1434,9 @@ namespace makcu {
     }
 
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::press(MouseButton button) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
         auto& cache = m_device->m_impl->commandCache;
         auto it = cache.press_commands.find(button);
         if (it != cache.press_commands.end()) {
@@ -1271,6 +1446,9 @@ namespace makcu {
     }
 
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::release(MouseButton button) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
         auto& cache = m_device->m_impl->commandCache;
         auto it = cache.release_commands.find(button);
         if (it != cache.release_commands.end()) {
@@ -1280,11 +1458,17 @@ namespace makcu {
     }
 
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::scroll(int32_t delta) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
         m_commands.push_back("km.wheel(" + std::to_string(delta) + ")");
         return *this;
     }
 
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::drag(MouseButton button, int32_t x, int32_t y) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
         auto& cache = m_device->m_impl->commandCache;
         auto pressIt = cache.press_commands.find(button);
         auto releaseIt = cache.release_commands.find(button);
@@ -1300,6 +1484,9 @@ namespace makcu {
     }
 
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::dragSmooth(MouseButton button, int32_t x, int32_t y, uint32_t segments) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
         auto& cache = m_device->m_impl->commandCache;
         auto pressIt = cache.press_commands.find(button);
         auto releaseIt = cache.release_commands.find(button);
@@ -1315,6 +1502,9 @@ namespace makcu {
 
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::dragBezier(MouseButton button, int32_t x, int32_t y, uint32_t segments,
         int32_t ctrl_x, int32_t ctrl_y) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
         auto& cache = m_device->m_impl->commandCache;
         auto pressIt = cache.press_commands.find(button);
         auto releaseIt = cache.release_commands.find(button);
@@ -1330,6 +1520,10 @@ namespace makcu {
     }
 
     bool Device::BatchCommandBuilder::execute() {
+        if (!isDeviceAlive()) {
+            return false;
+        }
+
         if (!m_device->m_impl->connected.load()) {
             return false;
         }
@@ -1352,9 +1546,11 @@ namespace makcu {
     }
 
     std::string Device::receiveRawResponse() const {
-        // This method is deprecated and not recommended for performance
-        // Use async methods instead
-        return "";
+        if (!m_impl->connected.load(std::memory_order_acquire)) {
+            return "";
+        }
+
+        return m_impl->serialPort->readString();
     }
 
 
@@ -1366,22 +1562,21 @@ namespace makcu {
         case MouseButton::MIDDLE: return "MIDDLE";
         case MouseButton::SIDE1: return "SIDE1";
         case MouseButton::SIDE2: return "SIDE2";
+        case MouseButton::UNKNOWN: return "UNKNOWN";
         }
         return "UNKNOWN";
     }
 
     MouseButton stringToMouseButton(const std::string& buttonName) {
-        std::string upper = buttonName;
-        std::transform(upper.begin(), upper.end(), upper.begin(),
-            [](unsigned char c) { return std::toupper(c); });
+        const std::string_view name{buttonName};
 
-        if (upper == "LEFT") return MouseButton::LEFT;
-        if (upper == "RIGHT") return MouseButton::RIGHT;
-        if (upper == "MIDDLE") return MouseButton::MIDDLE;
-        if (upper == "SIDE1") return MouseButton::SIDE1;
-        if (upper == "SIDE2") return MouseButton::SIDE2;
+        if (equalsIgnoreAsciiCase(name, "LEFT")) return MouseButton::LEFT;
+        if (equalsIgnoreAsciiCase(name, "RIGHT")) return MouseButton::RIGHT;
+        if (equalsIgnoreAsciiCase(name, "MIDDLE")) return MouseButton::MIDDLE;
+        if (equalsIgnoreAsciiCase(name, "SIDE1")) return MouseButton::SIDE1;
+        if (equalsIgnoreAsciiCase(name, "SIDE2")) return MouseButton::SIDE2;
 
-        return MouseButton::LEFT; // Default fallback
+        return MouseButton::UNKNOWN;
     }
 
 } // namespace makcu
