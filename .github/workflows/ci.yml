@@ -124,6 +124,11 @@ jobs:
       run: |
         cmake --build examples/build --config Release --parallel
 
+    - name: Run C API smoke test
+      run: |
+        $env:Path = "${{ github.workspace }}\\build\\bin\\Release;$env:Path"
+        .\examples\build\bin\Release\c_api_test.exe
+
     - name: Install NSIS
       run: |
         choco install nsis -y
@@ -178,6 +183,10 @@ jobs:
     - name: Build examples
       run: |
         cmake --build examples/build --parallel
+
+    - name: Run C API smoke test
+      run: |
+        LD_LIBRARY_PATH="${{ github.workspace }}/build/lib:${LD_LIBRARY_PATH}" ./examples/build/bin/c_api_test
 
     - name: Create packages
       run: |

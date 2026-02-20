@@ -88,6 +88,7 @@ mkdir build && cd build
 cmake .. && make        # Build all examples
 ./bin/demo              # C++ demo application
 ./bin/basic_usage       # C++ basic usage example
+./bin/c_api_test        # C API comprehensive test
 ```
 
 ### Language Integration Examples
