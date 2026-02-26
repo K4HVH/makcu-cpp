@@ -570,6 +570,10 @@ namespace makcu {
         return m_timeout;
     }
 
+    std::string SerialPort::getLastError() {
+        return getLastPlatformError();
+    }
+
     std::vector<std::string> SerialPort::getAvailablePorts() {
         std::vector<std::string> ports;
 
