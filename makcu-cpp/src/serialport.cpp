@@ -591,9 +591,13 @@ void SerialPort::setTimeout(uint32_t timeoutMs) {
 	}
 }
 
-uint32_t SerialPort::getTimeout() const {
-	return m_timeout;
-}
+    uint32_t SerialPort::getTimeout() const {
+        return m_timeout;
+    }
+
+    std::string SerialPort::getLastError() {
+        return getLastPlatformError();
+    }
 
 std::vector<std::string> SerialPort::getAvailablePorts() {
 	std::vector<std::string> ports;

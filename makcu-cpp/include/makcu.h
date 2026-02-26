@@ -135,7 +135,7 @@ namespace makcu {
         static std::string findFirstDevice();
 
         // Connection with async support
-        bool connect(const std::string& port = "");
+        bool connect(const std::string& port = "", const bool highSpeed = true);
         void disconnect();
         bool isConnected() const;
         ConnectionStatus getStatus() const;
@@ -268,6 +268,9 @@ namespace makcu {
         // Legacy raw command interface (not recommended for performance)
         bool sendRawCommand(const std::string& command) const;
         std::string receiveRawResponse() const;
+
+        // Error handling
+        std::string getLastError();
 
     private:
         // Implementation details with caching and optimization
