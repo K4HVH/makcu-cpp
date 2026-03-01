@@ -111,7 +111,7 @@ namespace makcu {
     private:
         std::string m_portName;
         uint32_t m_baudRate;
-        uint32_t m_timeout;
+        std::atomic<uint32_t> m_timeout;
         std::atomic<bool> m_isOpen;
         mutable std::mutex m_mutex;
         mutable std::mutex m_nativeHandleMutex;

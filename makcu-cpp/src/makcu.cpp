@@ -229,13 +229,11 @@ namespace makcu {
             // Wake up the monitoring thread immediately.
             monitoringCondition.notify_all();
 
-            if (std::this_thread::get_id() == monitoringThread.get_id()) {
-                // Avoid self-join if disconnect is triggered from monitoring callback context.
-                monitoringThread.detach();
-                return;
+            if (std::this_thread::get_id() != monitoringThread.get_id()) {
+                monitoringThread.join();
             }
-
-            monitoringThread.join();
+            // If on the monitoring thread, skip join — the jthread destructor
+            // will join after the monitoring loop exits via the stop token.
         }
 
         Impl() : serialPort(std::make_unique<SerialPort>())

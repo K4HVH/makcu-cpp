@@ -12,6 +12,7 @@
 #include <string_view>
 #include <utility>
 #include <limits>
+#include <variant>
 
 #ifdef _WIN32
 #include <setupapi.h>
@@ -127,13 +128,11 @@ void SerialPort::close() {
 	// while another thread might hold m_commandMutex and wait for m_mutex.
 	if (m_listenerThread.joinable()) {
 		m_listenerThread.request_stop();
-		if (std::this_thread::get_id() == m_listenerThread.get_id()) {
-			// Avoid self-join if close() is triggered from a listener callback.
-			m_listenerThread.detach();
-		}
-		else {
+		if (std::this_thread::get_id() != m_listenerThread.get_id()) {
 			m_listenerThread.join();
 		}
+		// If on the listener thread, skip join — the jthread destructor
+		// will join after the listener loop exits via the stop token.
 	}
 
 	std::lock_guard<std::mutex> lock(m_mutex);
@@ -741,14 +740,14 @@ bool SerialPort::flush() {
 
 void SerialPort::setTimeout(uint32_t timeoutMs) {
 	std::lock_guard<std::mutex> lock(m_mutex);
-	m_timeout = timeoutMs;
+	m_timeout.store(timeoutMs, std::memory_order_relaxed);
 	if (m_isOpen.load(std::memory_order_acquire)) {
 		platformUpdateTimeouts();
 	}
 }
 
 uint32_t SerialPort::getTimeout() const noexcept {
-	return m_timeout;
+	return m_timeout.load(std::memory_order_relaxed);
 }
 
 std::vector<std::string> SerialPort::getAvailablePorts() {
@@ -1110,7 +1109,7 @@ void SerialPort::platformUpdateTimeoutsUnlocked() {
 		if (tcgetattr(m_fd, &currentTermios) == 0) {
 			// Update timeout settings to match current m_timeout value
 			// VTIME is in deciseconds (0.1s units), so convert from ms
-			uint8_t vtime = std::min(255, std::max(1, static_cast<int>(m_timeout / 100)));
+			uint8_t vtime = std::min(255, std::max(1, static_cast<int>(m_timeout.load(std::memory_order_relaxed) / 100)));
 			currentTermios.c_cc[VTIME] = vtime;
 			currentTermios.c_cc[VMIN] = 0;  // Non-blocking
 			tcsetattr(m_fd, TCSANOW, &currentTermios);
@@ -1157,7 +1156,7 @@ ssize_t SerialPort::platformWrite(const void* data, size_t length) {
 			pfd.events = POLLOUT;
 
 			const uint32_t clampedTimeout =
-			    std::min<uint32_t>(m_timeout, static_cast<uint32_t>((std::numeric_limits<int>::max)()));
+			    std::min<uint32_t>(m_timeout.load(std::memory_order_relaxed), static_cast<uint32_t>((std::numeric_limits<int>::max)()));
 			int pollResult = 0;
 			do {
 				pollResult = poll(&pfd, 1, static_cast<int>(clampedTimeout));
