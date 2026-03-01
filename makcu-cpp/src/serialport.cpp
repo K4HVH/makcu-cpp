@@ -7,6 +7,12 @@
 #include <cstring>
 #include <chrono>
 #include <future>
+#include <expected>
+#include <charconv>
+#include <string_view>
+#include <utility>
+#include <limits>
+#include <variant>
 
 #ifdef _WIN32
 #include <setupapi.h>
@@ -27,6 +33,34 @@
 #endif
 
 namespace makcu {
+
+namespace {
+using ParsedTrackedResponse = std::pair<int, std::string>;
+
+std::expected<ParsedTrackedResponse, std::monostate> parseTrackedResponse(std::string_view content) {
+	const size_t hashPos = content.find('#');
+	if (hashPos == std::string_view::npos) {
+		return std::unexpected(std::monostate{});
+	}
+
+	const std::string_view idAndPayload = content.substr(hashPos + 1);
+	const size_t colonPos = idAndPayload.find(':');
+	if (colonPos == std::string_view::npos) {
+		return std::unexpected(std::monostate{});
+	}
+
+	const std::string_view idView = idAndPayload.substr(0, colonPos);
+	int cmdId = 0;
+	const auto [parseEnd, parseErr] =
+	    std::from_chars(idView.data(), idView.data() + idView.size(), cmdId);
+	if (parseErr != std::errc{} || parseEnd != idView.data() + idView.size()) {
+		return std::unexpected(std::monostate{});
+	}
+
+	std::string result(idAndPayload.substr(colonPos + 1));
+	return ParsedTrackedResponse{cmdId, std::move(result)};
+}
+} // namespace
 
 SerialPort::SerialPort()
 	: m_baudRate(115200)
@@ -49,63 +83,66 @@ SerialPort::~SerialPort() {
 }
 
 bool SerialPort::open(const std::string& port, uint32_t baudRate) {
-	std::lock_guard<std::mutex> lock(m_mutex);
+	for (;;) {
+		std::unique_lock<std::mutex> lock(m_mutex);
+		if (m_isOpen) {
+			// Avoid re-entrant deadlock by releasing the lock before calling close().
+			lock.unlock();
+			close();
+			continue;
+		}
 
-	if (m_isOpen) {
-		close();
-	}
+		m_portName = port;
+		m_baudRate.store(baudRate, std::memory_order_relaxed);
 
-	m_portName = port;
-	m_baudRate = baudRate;
-
-	// Unified logic with platform abstraction
+		// Unified logic with platform abstraction
 #ifdef _WIN32
-	std::string devicePath = "\\\\.\\" + port;
+		std::string devicePath = "\\\\.\\" + port;
 #else
-	std::string devicePath = "/dev/" + port;
+		std::string devicePath = "/dev/" + port;
 #endif
 
-	if (!platformOpen(devicePath)) {
-		return false;
+		if (!platformOpen(devicePath)) {
+			return false;
+		}
+
+		if (!platformConfigurePort()) {
+			platformClose();
+			return false;
+		}
+
+		m_isOpen = true;
+
+		// Start high-performance listener thread (shared logic)
+		m_listenerThread = std::jthread([this](std::stop_token stopToken) {
+			listenerLoop(stopToken);
+		});
+
+		return true;
 	}
-
-	if (!platformConfigurePort()) {
-		platformClose();
-		return false;
-	}
-
-	m_isOpen = true;
-
-	// Start high-performance listener thread (shared logic)
-	m_stopListener = false;
-	m_listenerThread = std::thread(&SerialPort::listenerLoop, this);
-
-	return true;
 }
 
 void SerialPort::close() {
+	// Stop listener thread BEFORE acquiring mutex to avoid deadlock.
+	// The listener may call processResponse which acquires m_commandMutex,
+	// while another thread might hold m_commandMutex and wait for m_mutex.
+	if (m_listenerThread.joinable()) {
+		m_listenerThread.request_stop();
+		if (std::this_thread::get_id() != m_listenerThread.get_id()) {
+			m_listenerThread.join();
+		}
+		// If on the listener thread, skip join — the jthread destructor
+		// will join after the listener loop exits via the stop token.
+	}
+
 	std::lock_guard<std::mutex> lock(m_mutex);
 
-	if (!m_isOpen) {
+	if (!m_isOpen.load(std::memory_order_acquire)) {
 		return;
 	}
 
-	// Stop listener thread first
-	m_stopListener.store(true, std::memory_order_release);
-
-	// Wait for listener thread to finish with timeout protection
-	if (m_listenerThread.joinable()) {
-		// Use a timeout to prevent indefinite blocking
-		auto future = std::async(std::launch::async, [this]() {
-			m_listenerThread.join();
-		});
-
-		if (future.wait_for(std::chrono::milliseconds(1000)) == std::future_status::timeout) {
-			// Thread didn't exit cleanly - this is a serious issue but we must continue cleanup
-			// The thread will be destroyed when the object is destroyed
-			m_listenerThread.detach();
-		}
-	}
+	// Mark closed so no new I/O starts while we tear down.
+	m_isOpen.store(false, std::memory_order_release);
 
 	// Cancel all pending commands with double-checked locking for safety
 	// First pass: mark all commands as cancelled to prevent new promise operations
@@ -117,6 +154,7 @@ void SerialPort::close() {
 			commandsToCancel.push_back(std::move(cmd));
 		}
 		m_pendingCommands.clear();
+		m_pendingCommandOrder.clear();
 	}
 
 	// Second pass: cancel commands outside of mutex to prevent deadlock
@@ -132,13 +170,12 @@ void SerialPort::close() {
 
 	// Platform-specific cleanup
 	platformClose();
-	m_isOpen.store(false, std::memory_order_release);
 
 	// Reset button state
 	m_lastButtonMask.store(0, std::memory_order_release);
 }
 
-bool SerialPort::isOpen() const {
+bool SerialPort::isOpen() const noexcept {
 	return m_isOpen;
 }
 
@@ -203,14 +240,24 @@ std::future<std::string> SerialPort::sendTrackedCommand(const std::string& comma
 		return promise.get_future();
 	}
 
-	int cmdId = generateCommandId();
-	auto pendingCmd = std::make_unique<PendingCommand>(cmdId, command, expectResponse, timeout);
-	auto future = pendingCmd->promise.get_future();
+	int cmdId = -1;
+	std::future<std::string> future;
 
-	// Store pending command (shared logic)
+	// Store pending command under lock so ID generation cannot collide.
 	{
 		std::lock_guard<std::mutex> lock(m_commandMutex);
-		m_pendingCommands[cmdId] = std::move(pendingCmd);
+		cmdId = generateCommandId();
+		if (cmdId <= 0) {
+			std::promise<std::string> promise;
+			promise.set_exception(std::make_exception_ptr(
+			                          std::runtime_error("No command IDs available")));
+			return promise.get_future();
+		}
+
+		auto pendingCmd = std::make_unique<PendingCommand>(cmdId, command, expectResponse, timeout);
+		future = pendingCmd->promise.get_future();
+		m_pendingCommands.emplace(cmdId, std::move(pendingCmd));
+		m_pendingCommandOrder.push_back(cmdId);
 	}
 
 	// Send command with ID tracking (shared logic)
@@ -241,6 +288,10 @@ std::future<std::string> SerialPort::sendTrackedCommand(const std::string& comma
 				// Promise already set
 			}
 			m_pendingCommands.erase(it);
+			auto orderIt = std::find(m_pendingCommandOrder.begin(), m_pendingCommandOrder.end(), cmdId);
+			if (orderIt != m_pendingCommandOrder.end()) {
+				m_pendingCommandOrder.erase(orderIt);
+			}
 		}
 	}
 
@@ -276,16 +327,52 @@ bool SerialPort::sendCommand(const std::string& command) {
 	return false;
 }
 
-void SerialPort::listenerLoop() {
+void SerialPort::listenerLoop(std::stop_token stopToken) {
 	// Optimized read buffers (shared logic)
 	std::vector<uint8_t> readBuffer(BUFFER_SIZE);
 	std::vector<uint8_t> lineBuffer(LINE_BUFFER_SIZE);
 	size_t linePos = 0;
+	enum class ButtonPrefixState : uint8_t {
+		NONE,
+		K,
+		KM,
+		KM_DOT
+	};
+	ButtonPrefixState buttonPrefixState = ButtonPrefixState::NONE;
 
 	auto lastCleanup = std::chrono::steady_clock::now();
 	constexpr auto cleanupInterval = std::chrono::milliseconds(50);
 
-	while (!m_stopListener && m_isOpen.load()) {
+	auto appendTextByte = [&](uint8_t byte) {
+		if (byte == 0x0A) { // Line feed
+			if (linePos > 0) {
+				std::string line(lineBuffer.begin(), lineBuffer.begin() + linePos);
+				linePos = 0;
+				if (!line.empty()) {
+					processResponse(line);
+				}
+			}
+			return;
+		}
+
+		if (byte == 0x0D) { // Ignore carriage return
+			return;
+		}
+
+		if (linePos < LINE_BUFFER_SIZE - 1) {
+			lineBuffer[linePos++] = byte;
+			return;
+		}
+
+		// Buffer overflow protection - discard line and reset.
+#ifdef DEBUG
+		std::cerr << "SerialPort: Line buffer overflow, discarding data" << std::endl;
+#endif
+		linePos = 0;
+		buttonPrefixState = ButtonPrefixState::NONE;
+	};
+
+	while (!stopToken.stop_requested() && m_isOpen.load(std::memory_order_acquire)) {
 		try {
 			// Unified bytes available check
 			size_t bytesAvailable = platformBytesAvailable();
@@ -303,61 +390,77 @@ void SerialPort::listenerLoop() {
 				continue;
 			}
 
-			bool expectButtonMask = false;
-
 			// Shared byte processing logic
 			for (ssize_t i = 0; i < bytesRead; ++i) {
-				uint8_t byte = readBuffer[i];
+				const uint8_t byte = readBuffer[i];
+				bool consumed = false;
 
-				// If km. was just seen, and the byte looks like a button mask (<32), handle it
-				if (expectButtonMask) {
-					if (byte < 32) {
-						handleButtonData(byte);
+				auto flushPrefixAsText = [&]() {
+					switch (buttonPrefixState) {
+						case ButtonPrefixState::K:
+							appendTextByte('k');
+							break;
+						case ButtonPrefixState::KM:
+							appendTextByte('k');
+							appendTextByte('m');
+							break;
+						case ButtonPrefixState::KM_DOT:
+							appendTextByte('k');
+							appendTextByte('m');
+							appendTextByte('.');
+							break;
+						case ButtonPrefixState::NONE:
+						default:
+							break;
 					}
-					expectButtonMask = false;
+					buttonPrefixState = ButtonPrefixState::NONE;
+				};
+
+				// Detect standalone button prefix "km." only when the current text line is empty.
+				if (linePos == 0 || buttonPrefixState != ButtonPrefixState::NONE) {
+					switch (buttonPrefixState) {
+						case ButtonPrefixState::NONE:
+							if (byte == 'k') {
+								buttonPrefixState = ButtonPrefixState::K;
+								consumed = true;
+							}
+							break;
+						case ButtonPrefixState::K:
+							if (byte == 'm') {
+								buttonPrefixState = ButtonPrefixState::KM;
+								consumed = true;
+							}
+							else {
+								flushPrefixAsText();
+							}
+							break;
+						case ButtonPrefixState::KM:
+							if (byte == '.') {
+								buttonPrefixState = ButtonPrefixState::KM_DOT;
+								consumed = true;
+							}
+							else {
+								flushPrefixAsText();
+							}
+							break;
+						case ButtonPrefixState::KM_DOT:
+							if (byte < 32) {
+								handleButtonData(byte);
+								buttonPrefixState = ButtonPrefixState::NONE;
+								consumed = true;
+							}
+							else {
+								flushPrefixAsText();
+							}
+							break;
+					}
+				}
+
+				if (consumed) {
 					continue;
 				}
 
-				// Detect "km."
-				if (byte == 'k') {
-					linePos = 0;
-					lineBuffer[linePos++] = byte;
-					continue;
-				}
-
-				if (linePos == 1 && byte == 'm') {
-					lineBuffer[linePos++] = byte;
-					continue;
-				}
-
-				if (linePos == 2 && byte == '.') {
-					expectButtonMask = true;
-					linePos = 0; // discard prefix
-					continue;
-				}
-
-				// Handle text response data
-				if (byte == 0x0A) { // Line feed
-					if (linePos > 0) {
-						std::string line(lineBuffer.begin(), lineBuffer.begin() + linePos);
-						linePos = 0;
-						if (!line.empty()) {
-							processResponse(line);
-						}
-					}
-				}
-				else if (byte != 0x0D) { // Ignore carriage return
-					if (linePos < LINE_BUFFER_SIZE - 1) {
-						lineBuffer[linePos++] = byte;
-					}
-					else {
-						// Buffer overflow protection - discard line and reset
-#ifdef DEBUG
-						std::cerr << "SerialPort: Line buffer overflow, discarding data" << std::endl;
-#endif
-						linePos = 0;
-					}
-				}
+				appendTextByte(byte);
 			}
 
 			// Periodic cleanup of timed-out commands (shared logic)
@@ -402,78 +505,90 @@ void SerialPort::listenerLoop() {
 }
 
 void SerialPort::handleButtonData(uint8_t data) {
-	uint8_t lastMask = m_lastButtonMask.load();
+	const uint8_t lastMask = m_lastButtonMask.load(std::memory_order_acquire);
 	if (data == lastMask) {
 		return; // No change
 	}
 
-	m_lastButtonMask.store(data);
+	m_lastButtonMask.store(data, std::memory_order_release);
 
-	if (m_buttonCallback) {
-		// Only process changed bits
-		uint8_t changedBits = data ^ lastMask;
-		for (int bit = 0; bit < 5; ++bit) {
-			if (changedBits & (1 << bit)) {
-				bool isPressed = data & (1 << bit);
-				try {
-					m_buttonCallback(bit, isPressed);
-				}
-				catch (...) {
-					// Ignore callback exceptions
-				}
+	ButtonCallback callbackCopy;
+	{
+		std::lock_guard<std::mutex> lock(m_buttonCallbackMutex);
+		callbackCopy = m_buttonCallback;
+	}
+	if (!callbackCopy) {
+		return;
+	}
+
+	// Only process changed bits.
+	const uint8_t changedBits = static_cast<uint8_t>(data ^ lastMask);
+	for (int bit = 0; bit < 5; ++bit) {
+		if (changedBits & (1 << bit)) {
+			const bool isPressed = (data & (1 << bit)) != 0;
+			try {
+				callbackCopy(bit, isPressed);
+			}
+			catch (...) {
+				// Ignore callback exceptions.
 			}
 		}
 	}
 }
 
 void SerialPort::processResponse(const std::string& response) {
-	// Remove ">>> " prefix if present
-	std::string content = response;
-	if (content.substr(0, 4) == ">>> ") {
+	// Remove ">>> " prefix if present using string_view to avoid copies
+	std::string_view content = response;
+	if (content.starts_with(">>> ")) {
 		content = content.substr(4);
 	}
 
-	// Check for command ID correlation
-	size_t hashPos = content.find('#');
-	if (hashPos != std::string::npos) {
-		// Extract command ID
-		std::string idStr = content.substr(hashPos + 1);
-		size_t colonPos = idStr.find(':');
-		if (colonPos != std::string::npos) {
-			try {
-				int cmdId = std::stoi(idStr.substr(0, colonPos));
-				std::string result = idStr.substr(colonPos + 1);
-
-				std::lock_guard<std::mutex> lock(m_commandMutex);
-				auto it = m_pendingCommands.find(cmdId);
-				if (it != m_pendingCommands.end()) {
-					try {
-						it->second->promise.set_value(result);
-					}
-					catch (...) {
-						// Promise already set
-					}
-					m_pendingCommands.erase(it);
+	// Check for command ID correlation.
+	const auto parsedResponse = parseTrackedResponse(content);
+	std::string untrackedContent{content};
+	if (parsedResponse) {
+		auto [cmdId, result] = parsedResponse.value();
+		{
+			std::lock_guard<std::mutex> lock(m_commandMutex);
+			auto it = m_pendingCommands.find(cmdId);
+			if (it != m_pendingCommands.end()) {
+				try {
+					it->second->promise.set_value(result);
+				}
+				catch (...) {
+					// Promise already set
+				}
+				m_pendingCommands.erase(it);
+				auto orderIt = std::find(m_pendingCommandOrder.begin(), m_pendingCommandOrder.end(), cmdId);
+				if (orderIt != m_pendingCommandOrder.end()) {
+					m_pendingCommandOrder.erase(orderIt);
 				}
 				return;
 			}
-			catch (...) {
-				// Failed to parse ID, treat as normal response
-			}
 		}
+
+		// Correlated response ID was not pending anymore (e.g. timeout/race).
+		// Fall back to oldest pending command instead of dropping the payload.
+		untrackedContent = std::move(result);
 	}
 
 	// Handle untracked response (oldest pending command)
 	std::lock_guard<std::mutex> lock(m_commandMutex);
-	if (!m_pendingCommands.empty()) {
-		auto it = m_pendingCommands.begin();
+	while (!m_pendingCommandOrder.empty()) {
+		int cmdId = m_pendingCommandOrder.front();
+		m_pendingCommandOrder.pop_front();
+		auto it = m_pendingCommands.find(cmdId);
+		if (it == m_pendingCommands.end()) {
+			continue;
+		}
 		try {
-			it->second->promise.set_value(content);
+			it->second->promise.set_value(untrackedContent);
 		}
 		catch (...) {
 			// Promise already set
 		}
 		m_pendingCommands.erase(it);
+		break;
 	}
 }
 
@@ -487,6 +602,7 @@ void SerialPort::cleanupTimedOutCommands() {
 		                   now - it->second->timestamp);
 
 		if (elapsed > it->second->timeout) {
+			int timedOutId = it->first;
 			try {
 				it->second->promise.set_exception(std::make_exception_ptr(
 				                                      std::runtime_error("Command timeout")));
@@ -495,6 +611,10 @@ void SerialPort::cleanupTimedOutCommands() {
 				// Promise already set
 			}
 			it = m_pendingCommands.erase(it);
+			auto orderIt = std::find(m_pendingCommandOrder.begin(), m_pendingCommandOrder.end(), timedOutId);
+			if (orderIt != m_pendingCommandOrder.end()) {
+				m_pendingCommandOrder.erase(orderIt);
+			}
 		}
 		else {
 			++it;
@@ -503,18 +623,34 @@ void SerialPort::cleanupTimedOutCommands() {
 }
 
 int SerialPort::generateCommandId() {
-	return (m_commandCounter.fetch_add(1) % 10000) + 1;
+	// Must be called with m_commandMutex held.
+	constexpr uint32_t MAX_ATTEMPTS = 65536;
+	for (uint32_t attempts = 0; attempts < MAX_ATTEMPTS; ++attempts) {
+		constexpr uint32_t MAX_COMMAND_ID = static_cast<uint32_t>((std::numeric_limits<int>::max)());
+		if (m_commandCounter >= MAX_COMMAND_ID) {
+			m_commandCounter = 0;
+		}
+
+		++m_commandCounter;
+		const int candidateId = static_cast<int>(m_commandCounter);
+		if (m_pendingCommands.find(candidateId) == m_pendingCommands.end()) {
+			return candidateId;
+		}
+	}
+
+	return -1;
 }
 
 
 void SerialPort::setButtonCallback(ButtonCallback callback) {
-	m_buttonCallback = callback;
+	std::lock_guard<std::mutex> lock(m_buttonCallbackMutex);
+	m_buttonCallback = std::move(callback);
 }
 
 // Legacy compatibility methods
 bool SerialPort::setBaudRate(uint32_t baudRate) {
 	std::lock_guard<std::mutex> lock(m_mutex);
-	m_baudRate = baudRate;
+	m_baudRate.store(baudRate, std::memory_order_relaxed);
 
 	if (m_isOpen) {
 		// Unified approach - reconfigure port with new baud rate
@@ -523,16 +659,35 @@ bool SerialPort::setBaudRate(uint32_t baudRate) {
 	return true;
 }
 
-uint32_t SerialPort::getBaudRate() const {
-	return m_baudRate;
+uint32_t SerialPort::getBaudRate() const noexcept {
+	return m_baudRate.load(std::memory_order_relaxed);
 }
 
 std::string SerialPort::getPortName() const {
+	std::lock_guard<std::mutex> lock(m_mutex);
 	return m_portName;
 }
 
+bool SerialPort::write(std::span<const uint8_t> data) {
+	if (!m_isOpen.load(std::memory_order_acquire)) {
+		return false;
+	}
+
+	if (data.empty()) {
+		return true;
+	}
+
+	// Raw binary write path: do not append CRLF.
+	ssize_t bytesWritten = platformWrite(data.data(), data.size());
+	if (bytesWritten != static_cast<ssize_t>(data.size())) {
+		return false;
+	}
+
+	return platformFlush();
+}
+
 bool SerialPort::write(const std::vector<uint8_t>& data) {
-	return sendCommand(std::string(data.begin(), data.end()));
+	return write(std::span<const uint8_t>(data.data(), data.size()));
 }
 
 bool SerialPort::write(const std::string& data) {
@@ -571,7 +726,7 @@ size_t SerialPort::available() const {
 	}
 
 	// Unified bytes available check
-	return const_cast<SerialPort*>(this)->platformBytesAvailable();
+	return platformBytesAvailable();
 }
 
 bool SerialPort::flush() {
@@ -585,14 +740,15 @@ bool SerialPort::flush() {
 }
 
 void SerialPort::setTimeout(uint32_t timeoutMs) {
-	m_timeout = timeoutMs;
-	if (m_isOpen) {
+	std::lock_guard<std::mutex> lock(m_mutex);
+	m_timeout.store(timeoutMs, std::memory_order_relaxed);
+	if (m_isOpen.load(std::memory_order_acquire)) {
 		platformUpdateTimeouts();
 	}
 }
 
-uint32_t SerialPort::getTimeout() const {
-	return m_timeout;
+uint32_t SerialPort::getTimeout() const noexcept {
+	return m_timeout.load(std::memory_order_relaxed);
 }
 
 std::vector<std::string> SerialPort::getAvailablePorts() {
@@ -761,6 +917,7 @@ std::vector<std::string> SerialPort::findMakcuPorts() {
 
 // Platform abstraction helper implementations
 bool SerialPort::platformOpen(const std::string& devicePath) {
+	std::lock_guard<std::mutex> nativeLock(m_nativeHandleMutex);
 #ifdef _WIN32
 	m_handle = CreateFileA(
 	               devicePath.c_str(),
@@ -779,6 +936,7 @@ bool SerialPort::platformOpen(const std::string& devicePath) {
 }
 
 void SerialPort::platformClose() {
+	std::lock_guard<std::mutex> nativeLock(m_nativeHandleMutex);
 #ifdef _WIN32
 	if (m_handle != INVALID_HANDLE_VALUE) {
 		CloseHandle(m_handle);
@@ -793,6 +951,7 @@ void SerialPort::platformClose() {
 }
 
 bool SerialPort::platformConfigurePort() {
+	std::lock_guard<std::mutex> nativeLock(m_nativeHandleMutex);
 #ifdef _WIN32
 	m_dcb.DCBlength = sizeof(DCB);
 
@@ -800,7 +959,7 @@ bool SerialPort::platformConfigurePort() {
 		return false;
 	}
 
-	m_dcb.BaudRate = m_baudRate;
+	m_dcb.BaudRate = m_baudRate.load(std::memory_order_relaxed);
 	m_dcb.ByteSize = 8;
 	m_dcb.Parity = NOPARITY;
 	m_dcb.StopBits = ONESTOPBIT;
@@ -822,7 +981,7 @@ bool SerialPort::platformConfigurePort() {
 		return false;
 	}
 
-	platformUpdateTimeouts();
+	platformUpdateTimeoutsUnlocked();
 	return true;
 #else
 	// Linux implementation using termios
@@ -861,7 +1020,7 @@ bool SerialPort::platformConfigurePort() {
 
 	// Set baud rate
 	speed_t speed;
-	switch (m_baudRate) {
+	switch (m_baudRate.load(std::memory_order_relaxed)) {
 	case 9600:
 		speed = B9600;
 		break;
@@ -930,6 +1089,11 @@ bool SerialPort::platformConfigurePort() {
 }
 
 void SerialPort::platformUpdateTimeouts() {
+	std::lock_guard<std::mutex> nativeLock(m_nativeHandleMutex);
+	platformUpdateTimeoutsUnlocked();
+}
+
+void SerialPort::platformUpdateTimeoutsUnlocked() {
 #ifdef _WIN32
 	// Gaming-optimized timeouts - much faster than original
 	m_timeouts.ReadIntervalTimeout = 1;          // 1ms between bytes
@@ -941,12 +1105,12 @@ void SerialPort::platformUpdateTimeouts() {
 	SetCommTimeouts(m_handle, &m_timeouts);
 #else
 	// Linux gaming-optimized timeouts - match Windows performance
-	if (m_isOpen && m_fd >= 0) {
+	if (m_isOpen.load(std::memory_order_acquire) && m_fd >= 0) {
 		struct termios currentTermios;
 		if (tcgetattr(m_fd, &currentTermios) == 0) {
 			// Update timeout settings to match current m_timeout value
 			// VTIME is in deciseconds (0.1s units), so convert from ms
-			uint8_t vtime = std::min(255, std::max(1, static_cast<int>(m_timeout / 100)));
+			uint8_t vtime = std::min(255, std::max(1, static_cast<int>(m_timeout.load(std::memory_order_relaxed) / 100)));
 			currentTermios.c_cc[VTIME] = vtime;
 			currentTermios.c_cc[VMIN] = 0;  // Non-blocking
 			tcsetattr(m_fd, TCSANOW, &currentTermios);
@@ -956,16 +1120,75 @@ void SerialPort::platformUpdateTimeouts() {
 }
 
 ssize_t SerialPort::platformWrite(const void* data, size_t length) {
+	std::lock_guard<std::mutex> nativeLock(m_nativeHandleMutex);
 #ifdef _WIN32
 	DWORD bytesWritten = 0;
 	bool success = WriteFile(m_handle, data, static_cast<DWORD>(length), &bytesWritten, nullptr);
 	return success ? static_cast<ssize_t>(bytesWritten) : -1;
 #else
-	return ::write(m_fd, data, length);
+	if (length == 0) {
+		return 0;
+	}
+	if (m_fd < 0 || data == nullptr) {
+		return -1;
+	}
+
+	const uint8_t* bytes = static_cast<const uint8_t*>(data);
+	size_t totalWritten = 0;
+
+	while (totalWritten < length) {
+		ssize_t written = ::write(m_fd, bytes + totalWritten, length - totalWritten);
+		if (written > 0) {
+			totalWritten += static_cast<size_t>(written);
+			continue;
+		}
+
+		if (written == 0) {
+			break;
+		}
+
+		if (errno == EINTR) {
+			continue;
+		}
+
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			struct pollfd pfd {};
+			pfd.fd = m_fd;
+			pfd.events = POLLOUT;
+
+			const uint32_t clampedTimeout =
+			    std::min<uint32_t>(m_timeout.load(std::memory_order_relaxed), static_cast<uint32_t>((std::numeric_limits<int>::max)()));
+			int pollResult = 0;
+			do {
+				pollResult = poll(&pfd, 1, static_cast<int>(clampedTimeout));
+			} while (pollResult < 0 && errno == EINTR);
+
+			if (pollResult > 0 && (pfd.revents & POLLOUT)) {
+				continue;
+			}
+
+			if (pollResult == 0) {
+				errno = ETIMEDOUT;
+			}
+			else if (pollResult > 0) {
+				errno = EIO;
+			}
+			break;
+		}
+
+		break;
+	}
+
+	if (totalWritten == 0) {
+		return -1;
+	}
+
+	return static_cast<ssize_t>(totalWritten);
 #endif
 }
 
 ssize_t SerialPort::platformRead(void* buffer, size_t maxBytes) {
+	std::lock_guard<std::mutex> nativeLock(m_nativeHandleMutex);
 #ifdef _WIN32
 	DWORD bytesRead = 0;
 	bool success = ReadFile(m_handle, buffer, static_cast<DWORD>(maxBytes), &bytesRead, nullptr);
@@ -975,7 +1198,8 @@ ssize_t SerialPort::platformRead(void* buffer, size_t maxBytes) {
 #endif
 }
 
-size_t SerialPort::platformBytesAvailable() {
+size_t SerialPort::platformBytesAvailable() const {
+	std::lock_guard<std::mutex> nativeLock(m_nativeHandleMutex);
 #ifdef _WIN32
 	COMSTAT comStat;
 	DWORD errors;
@@ -993,6 +1217,7 @@ size_t SerialPort::platformBytesAvailable() {
 }
 
 bool SerialPort::platformFlush() {
+	std::lock_guard<std::mutex> nativeLock(m_nativeHandleMutex);
 #ifdef _WIN32
 	return FlushFileBuffers(m_handle) != 0;
 #else

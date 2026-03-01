@@ -23,7 +23,7 @@ target_link_libraries(your_existing_target PRIVATE makcu::makcu-cpp)
 ### C++ API
 
 ```cpp
-#include <makcu/makcu.h>
+#include <makcu.h>
 
 makcu::Device device;
 device.connect();
@@ -33,7 +33,7 @@ device.mouseMove(100, 0);
 ### C API
 
 ```c
-#include <makcu/makcu_c.h>
+#include <makcu_c.h>
 
 makcu_device_t* device = makcu_device_create();
 makcu_connect(device, "");
@@ -48,7 +48,7 @@ makcu_device_destroy(device);
 **Linux:**
 
 ```bash
-g++ -std=c++17 -I/usr/local/include/makcu your_app.cpp -lmakcu-cpp -lpthread -ludev
+g++ -std=c++23 -I/usr/local/include/makcu your_app.cpp -lmakcu-cpp -lpthread -ludev
 ```
 
 **Windows:** Add include/lib directories and link `makcu-cpp.lib` + `setupapi.lib`
@@ -120,7 +120,7 @@ extern "C" {
 ```go
 /*
 #cgo LDFLAGS: -lmakcu-cpp -lstdc++
-#include <makcu/makcu_c.h>
+#include <makcu_c.h>
 */
 import "C"
 device := C.makcu_device_create()
