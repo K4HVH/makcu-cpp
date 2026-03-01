@@ -73,7 +73,7 @@ namespace makcu {
 
         [[nodiscard]] bool setBaudRate(uint32_t baudRate);
         [[nodiscard]] uint32_t getBaudRate() const noexcept;
-        [[nodiscard]] std::string getPortName() const noexcept;
+        [[nodiscard]] std::string getPortName() const;
 
         // High-performance command execution with tracking
         [[nodiscard]] std::future<std::string> sendTrackedCommand(const std::string& command,
@@ -110,7 +110,7 @@ namespace makcu {
 
     private:
         std::string m_portName;
-        uint32_t m_baudRate;
+        std::atomic<uint32_t> m_baudRate;
         std::atomic<uint32_t> m_timeout;
         std::atomic<bool> m_isOpen;
         mutable std::mutex m_mutex;

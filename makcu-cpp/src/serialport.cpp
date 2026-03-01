@@ -93,7 +93,7 @@ bool SerialPort::open(const std::string& port, uint32_t baudRate) {
 		}
 
 		m_portName = port;
-		m_baudRate = baudRate;
+		m_baudRate.store(baudRate, std::memory_order_relaxed);
 
 		// Unified logic with platform abstraction
 #ifdef _WIN32
@@ -650,7 +650,7 @@ void SerialPort::setButtonCallback(ButtonCallback callback) {
 // Legacy compatibility methods
 bool SerialPort::setBaudRate(uint32_t baudRate) {
 	std::lock_guard<std::mutex> lock(m_mutex);
-	m_baudRate = baudRate;
+	m_baudRate.store(baudRate, std::memory_order_relaxed);
 
 	if (m_isOpen) {
 		// Unified approach - reconfigure port with new baud rate
@@ -660,10 +660,11 @@ bool SerialPort::setBaudRate(uint32_t baudRate) {
 }
 
 uint32_t SerialPort::getBaudRate() const noexcept {
-	return m_baudRate;
+	return m_baudRate.load(std::memory_order_relaxed);
 }
 
-std::string SerialPort::getPortName() const noexcept {
+std::string SerialPort::getPortName() const {
+	std::lock_guard<std::mutex> lock(m_mutex);
 	return m_portName;
 }
 
@@ -958,7 +959,7 @@ bool SerialPort::platformConfigurePort() {
 		return false;
 	}
 
-	m_dcb.BaudRate = m_baudRate;
+	m_dcb.BaudRate = m_baudRate.load(std::memory_order_relaxed);
 	m_dcb.ByteSize = 8;
 	m_dcb.Parity = NOPARITY;
 	m_dcb.StopBits = ONESTOPBIT;
@@ -1019,7 +1020,7 @@ bool SerialPort::platformConfigurePort() {
 
 	// Set baud rate
 	speed_t speed;
-	switch (m_baudRate) {
+	switch (m_baudRate.load(std::memory_order_relaxed)) {
 	case 9600:
 		speed = B9600;
 		break;
