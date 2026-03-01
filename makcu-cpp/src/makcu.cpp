@@ -542,17 +542,15 @@ namespace makcu {
             return static_cast<uint16_t>(1u << std::to_underlying(target));
         }
 
-        // Cache-based lock state management
+        // Cache-based lock state management using atomic RMW
         void updateLockStateCache(LockTarget target, bool locked) {
-            uint16_t cache = lockStateCache.load(std::memory_order_acquire);
             const uint16_t bit = lockBit(target);
             if (locked) {
-                cache = static_cast<uint16_t>(cache | bit);
+                lockStateCache.fetch_or(bit, std::memory_order_acq_rel);
             }
             else {
-                cache = static_cast<uint16_t>(cache & ~bit);
+                lockStateCache.fetch_and(static_cast<uint16_t>(~bit), std::memory_order_acq_rel);
             }
-            lockStateCache.store(cache, std::memory_order_release);
             lockStateCacheValid.store(true, std::memory_order_release);
         }
 

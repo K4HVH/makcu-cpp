@@ -64,7 +64,7 @@ See `examples/` for complete integration examples.
 
 ```bash
 cd examples && ./build.sh  # Build examples
-./build/bin/demo            # Run demo
+./build/bin/demo           # Run demo
 ```
 
 ## Performance
