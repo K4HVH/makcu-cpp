@@ -2,9 +2,12 @@ cmake_minimum_required(VERSION 3.20)
 project(makcu-cpp VERSION 1.3.5 LANGUAGES CXX)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Enable Link-Time Optimization for Release builds
+include(CheckIPOSupported)
+check_ipo_supported(RESULT MAKCU_IPO_SUPPORTED OUTPUT MAKCU_IPO_OUTPUT)
 
 # Build type options
 option(BUILD_SHARED_ONLY "Build only shared library" OFF)
@@ -99,6 +102,18 @@ foreach(target ${LIBRARY_TARGETS})
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/makcu-cpp/include>
             $<INSTALL_INTERFACE:include/makcu>
     )
+
+    # Require C++23 via target_compile_features
+    target_compile_features(${target} PUBLIC cxx_std_23)
+
+    # Enable LTO for Release builds
+    if(MAKCU_IPO_SUPPORTED)
+        set_target_properties(${target} PROPERTIES
+            INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
+            INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE
+        )
+    endif()
+
     # Link libraries
     target_link_libraries(${target} PUBLIC Threads::Threads)
 

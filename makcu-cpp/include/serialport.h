@@ -43,21 +43,20 @@ typedef SSIZE_T ssize_t;
 #include <sys/ioctl.h>
 #include <dirent.h>
 #include <fstream>
-#include <regex>
 #endif
 
 namespace makcu {
 
     struct PendingCommand {
-        int command_id;
         std::string command;
         std::promise<std::string> promise;
         std::chrono::steady_clock::time_point timestamp;
-        bool expect_response;
         std::chrono::milliseconds timeout;
+        int command_id;
+        bool expect_response;
 
         PendingCommand(int id, const std::string& cmd, bool expect_resp, std::chrono::milliseconds to)
-            : command_id(id), command(cmd), expect_response(expect_resp), timeout(to) {
+            : command(cmd), expect_response(expect_resp), timeout(to), command_id(id) {
             timestamp = std::chrono::steady_clock::now();
         }
     };
@@ -69,12 +68,12 @@ namespace makcu {
 
         [[nodiscard]] bool open(const std::string& port, uint32_t baudRate);
         void close();
-        [[nodiscard]] bool isOpen() const;
+        [[nodiscard]] bool isOpen() const noexcept;
         [[nodiscard]] bool isActuallyConnected() const;
 
         [[nodiscard]] bool setBaudRate(uint32_t baudRate);
-        [[nodiscard]] uint32_t getBaudRate() const;
-        [[nodiscard]] std::string getPortName() const;
+        [[nodiscard]] uint32_t getBaudRate() const noexcept;
+        [[nodiscard]] std::string getPortName() const noexcept;
 
         // High-performance command execution with tracking
         [[nodiscard]] std::future<std::string> sendTrackedCommand(const std::string& command,
@@ -99,7 +98,7 @@ namespace makcu {
 
         // Optimized timeout control
         void setTimeout(uint32_t timeoutMs);
-        [[nodiscard]] uint32_t getTimeout() const;
+        [[nodiscard]] uint32_t getTimeout() const noexcept;
 
         // Port enumeration
         [[nodiscard]] static std::vector<std::string> getAvailablePorts();
@@ -162,7 +161,7 @@ namespace makcu {
         void platformUpdateTimeoutsUnlocked();
         ssize_t platformWrite(const void* data, size_t length);
         ssize_t platformRead(void* buffer, size_t maxBytes);
-        size_t platformBytesAvailable();
+        size_t platformBytesAvailable() const;
         bool platformFlush();
         std::string getLastPlatformError();
 

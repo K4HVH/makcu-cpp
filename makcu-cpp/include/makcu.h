@@ -18,6 +18,7 @@
 #endif
 
 #include <string>
+#include <string_view>
 #include <vector>
 #include <memory>
 #include <functional>
@@ -141,8 +142,8 @@ namespace makcu {
         // Connection with async support
         [[nodiscard]] bool connect(const std::string& port = "");
         void disconnect();
-        [[nodiscard]] bool isConnected() const;
-        [[nodiscard]] ConnectionStatus getStatus() const;
+        [[nodiscard]] bool isConnected() const noexcept;
+        [[nodiscard]] ConnectionStatus getStatus() const noexcept;
 
         // Async connection methods
         [[nodiscard]] std::future<bool> connectAsync(const std::string& port = "");
@@ -208,8 +209,8 @@ namespace makcu {
 
         // Button monitoring with optimized processing
         [[nodiscard]] bool enableButtonMonitoring(bool enable = true);
-        [[nodiscard]] bool isButtonMonitoringEnabled() const;
-        [[nodiscard]] uint8_t getButtonMask() const;
+        [[nodiscard]] bool isButtonMonitoringEnabled() const noexcept;
+        [[nodiscard]] uint8_t getButtonMask() const noexcept;
 
         // Serial spoofing
         [[nodiscard]] std::string getMouseSerial();
@@ -243,7 +244,7 @@ namespace makcu {
 
         // Performance utilities
         void enableHighPerformanceMode(bool enable = true);
-        [[nodiscard]] bool isHighPerformanceModeEnabled() const;
+        [[nodiscard]] bool isHighPerformanceModeEnabled() const noexcept;
 
         // Command batching for maximum performance
         class MAKCU_API BatchCommandBuilder {
@@ -307,11 +308,11 @@ namespace makcu {
             s_enabled.store(enable);
         }
 
-        static void logCommandTiming(const std::string& command, std::chrono::microseconds duration) {
+        static void logCommandTiming(std::string_view command, std::chrono::microseconds duration) {
             if (!s_enabled.load()) return;
 
             std::lock_guard<std::mutex> lock(s_mutex);
-            auto& [count, total_us] = s_stats[command];
+            auto& [count, total_us] = s_stats[std::string{command}];
             count++;
             total_us += duration.count();
         }

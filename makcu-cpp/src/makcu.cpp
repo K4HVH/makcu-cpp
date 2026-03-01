@@ -103,53 +103,69 @@ namespace makcu {
     std::mutex PerformanceProfiler::s_mutex;
     std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> PerformanceProfiler::s_stats;
 
-    // Command cache for maximum performance
+    // Command cache for maximum performance - using constexpr arrays for zero-overhead lookups
     struct CommandCache {
-        // Pre-computed command strings
-        std::unordered_map<MouseButton, std::string> press_commands;
-        std::unordered_map<MouseButton, std::string> release_commands;
-        std::unordered_map<std::string, std::string> lock_commands;
-        std::unordered_map<std::string, std::string> unlock_commands;
-        std::unordered_map<std::string, std::string> query_commands;
+        static constexpr size_t BUTTON_COUNT = 5; // LEFT, RIGHT, MIDDLE, SIDE1, SIDE2
+        static constexpr size_t LOCK_TARGET_COUNT = 7; // X, Y, LEFT, RIGHT, MIDDLE, SIDE1, SIDE2
+
+        // Pre-computed command strings indexed by MouseButton enum value
+        std::array<std::string, BUTTON_COUNT> press_commands;
+        std::array<std::string, BUTTON_COUNT> release_commands;
+
+        // Lock/unlock/query commands indexed by LockTarget enum value
+        std::array<std::string, LOCK_TARGET_COUNT> lock_commands;
+        std::array<std::string, LOCK_TARGET_COUNT> unlock_commands;
+        std::array<std::string, LOCK_TARGET_COUNT> query_commands;
 
         CommandCache() {
-            // Pre-compute all button commands
-            press_commands[MouseButton::LEFT] = "km.left(1)";
-            press_commands[MouseButton::RIGHT] = "km.right(1)";
-            press_commands[MouseButton::MIDDLE] = "km.middle(1)";
-            press_commands[MouseButton::SIDE1] = "km.ms1(1)";
-            press_commands[MouseButton::SIDE2] = "km.ms2(1)";
+            // Pre-compute all button commands indexed by MouseButton
+            press_commands[std::to_underlying(MouseButton::LEFT)] = "km.left(1)";
+            press_commands[std::to_underlying(MouseButton::RIGHT)] = "km.right(1)";
+            press_commands[std::to_underlying(MouseButton::MIDDLE)] = "km.middle(1)";
+            press_commands[std::to_underlying(MouseButton::SIDE1)] = "km.ms1(1)";
+            press_commands[std::to_underlying(MouseButton::SIDE2)] = "km.ms2(1)";
 
-            release_commands[MouseButton::LEFT] = "km.left(0)";
-            release_commands[MouseButton::RIGHT] = "km.right(0)";
-            release_commands[MouseButton::MIDDLE] = "km.middle(0)";
-            release_commands[MouseButton::SIDE1] = "km.ms1(0)";
-            release_commands[MouseButton::SIDE2] = "km.ms2(0)";
+            release_commands[std::to_underlying(MouseButton::LEFT)] = "km.left(0)";
+            release_commands[std::to_underlying(MouseButton::RIGHT)] = "km.right(0)";
+            release_commands[std::to_underlying(MouseButton::MIDDLE)] = "km.middle(0)";
+            release_commands[std::to_underlying(MouseButton::SIDE1)] = "km.ms1(0)";
+            release_commands[std::to_underlying(MouseButton::SIDE2)] = "km.ms2(0)";
 
-            // Pre-compute lock commands
-            lock_commands["X"] = "km.lock_mx(1)";
-            lock_commands["Y"] = "km.lock_my(1)";
-            lock_commands["LEFT"] = "km.lock_ml(1)";
-            lock_commands["RIGHT"] = "km.lock_mr(1)";
-            lock_commands["MIDDLE"] = "km.lock_mm(1)";
-            lock_commands["SIDE1"] = "km.lock_ms1(1)";
-            lock_commands["SIDE2"] = "km.lock_ms2(1)";
+            // Pre-compute lock commands indexed by LockTarget
+            lock_commands[0] = "km.lock_mx(1)"; // X
+            lock_commands[1] = "km.lock_my(1)"; // Y
+            lock_commands[2] = "km.lock_ml(1)"; // LEFT
+            lock_commands[3] = "km.lock_mr(1)"; // RIGHT
+            lock_commands[4] = "km.lock_mm(1)"; // MIDDLE
+            lock_commands[5] = "km.lock_ms1(1)"; // SIDE1
+            lock_commands[6] = "km.lock_ms2(1)"; // SIDE2
 
-            unlock_commands["X"] = "km.lock_mx(0)";
-            unlock_commands["Y"] = "km.lock_my(0)";
-            unlock_commands["LEFT"] = "km.lock_ml(0)";
-            unlock_commands["RIGHT"] = "km.lock_mr(0)";
-            unlock_commands["MIDDLE"] = "km.lock_mm(0)";
-            unlock_commands["SIDE1"] = "km.lock_ms1(0)";
-            unlock_commands["SIDE2"] = "km.lock_ms2(0)";
+            unlock_commands[0] = "km.lock_mx(0)";
+            unlock_commands[1] = "km.lock_my(0)";
+            unlock_commands[2] = "km.lock_ml(0)";
+            unlock_commands[3] = "km.lock_mr(0)";
+            unlock_commands[4] = "km.lock_mm(0)";
+            unlock_commands[5] = "km.lock_ms1(0)";
+            unlock_commands[6] = "km.lock_ms2(0)";
 
-            query_commands["X"] = "km.lock_mx()";
-            query_commands["Y"] = "km.lock_my()";
-            query_commands["LEFT"] = "km.lock_ml()";
-            query_commands["RIGHT"] = "km.lock_mr()";
-            query_commands["MIDDLE"] = "km.lock_mm()";
-            query_commands["SIDE1"] = "km.lock_ms1()";
-            query_commands["SIDE2"] = "km.lock_ms2()";
+            query_commands[0] = "km.lock_mx()";
+            query_commands[1] = "km.lock_my()";
+            query_commands[2] = "km.lock_ml()";
+            query_commands[3] = "km.lock_mr()";
+            query_commands[4] = "km.lock_mm()";
+            query_commands[5] = "km.lock_ms1()";
+            query_commands[6] = "km.lock_ms2()";
+        }
+
+        // Safe button command lookup — returns nullptr if out of range
+        const std::string* getPressCommand(MouseButton button) const {
+            auto idx = std::to_underlying(button);
+            return idx < BUTTON_COUNT ? &press_commands[idx] : nullptr;
+        }
+
+        const std::string* getReleaseCommand(MouseButton button) const {
+            auto idx = std::to_underlying(button);
+            return idx < BUTTON_COUNT ? &release_commands[idx] : nullptr;
         }
     };
 
@@ -158,7 +174,6 @@ namespace makcu {
     public:
         std::unique_ptr<SerialPort> serialPort;
         DeviceInfo deviceInfo;
-        ConnectionStatus status;
         std::atomic<ConnectionStatus> atomicStatus{ConnectionStatus::DISCONNECTED};
         std::atomic<bool> connected;
         std::atomic<bool> highPerformanceMode;
@@ -224,7 +239,6 @@ namespace makcu {
         }
 
         Impl() : serialPort(std::make_unique<SerialPort>())
-            , status(ConnectionStatus::DISCONNECTED)
             , connected(false)
             , highPerformanceMode(false) {
             deviceInfo.isConnected = false;
@@ -297,15 +311,15 @@ namespace makcu {
         }
 
         void handleButtonEvent(uint8_t button, bool pressed) {
-            // Update button mask atomically
-            uint8_t currentMask = currentButtonMask.load();
+            // Update button mask atomically using fetch_or/fetch_and
+            // to avoid lost updates from concurrent button events
+            const uint8_t bit = static_cast<uint8_t>(1u << button);
             if (pressed) {
-                currentMask |= (1 << button);
+                currentButtonMask.fetch_or(bit, std::memory_order_acq_rel);
             }
             else {
-                currentMask &= ~(1 << button);
+                currentButtonMask.fetch_and(static_cast<uint8_t>(~bit), std::memory_order_acq_rel);
             }
-            currentButtonMask.store(currentMask);
 
             // Call user callback if set
             if (button >= 5) {
@@ -407,15 +421,7 @@ namespace makcu {
 
             auto start = std::chrono::high_resolution_clock::now();
 
-            bool result;
-            if (highPerformanceMode.load()) {
-                // Fire-and-forget mode for gaming
-                result = serialPort->sendCommand(command);
-            }
-            else {
-                // Standard mode with minimal tracking
-                result = serialPort->sendCommand(command);
-            }
+            bool result = serialPort->sendCommand(command);
 
             // Performance profiling
             auto end = std::chrono::high_resolution_clock::now();
@@ -441,7 +447,6 @@ namespace makcu {
             
             std::lock_guard<std::mutex> lock(commandBufferMutex);
             moveCommandBuffer.clear();
-            moveCommandBuffer.reserve(64); // Increased buffer size for safety
 
             moveCommandBuffer = "km.move(";
             moveCommandBuffer += std::to_string(x);
@@ -603,17 +608,14 @@ namespace makcu {
 
         std::string targetPort = port.empty() ? findFirstDevice() : port;
         if (targetPort.empty()) {
-            m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             return false;
         }
 
-        m_impl->status = ConnectionStatus::CONNECTING;
         m_impl->atomicStatus.store(ConnectionStatus::CONNECTING, std::memory_order_release);
 
         // Open at initial baud rate
         if (!m_impl->serialPort->open(targetPort, INITIAL_BAUD_RATE)) {
-            m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             return false;
         }
@@ -621,7 +623,6 @@ namespace makcu {
         // Switch to high-speed mode
         if (!Impl::performBaudRateChange(m_impl->serialPort.get(), HIGH_SPEED_BAUD_RATE)) {
             m_impl->serialPort->close();
-            m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             m_impl->deviceInfo.isConnected = false;
             return false;
@@ -630,7 +631,6 @@ namespace makcu {
         // Validate connection after baud rate switch
         if (!m_impl->serialPort->isOpen() || !m_impl->serialPort->isActuallyConnected()) {
             m_impl->serialPort->close();
-            m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             m_impl->deviceInfo.isConnected = false;
             return false;
@@ -639,7 +639,6 @@ namespace makcu {
         // Initialize device
         if (!m_impl->initializeDevice()) {
             m_impl->serialPort->close();
-            m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             m_impl->deviceInfo.isConnected = false;
             return false;
@@ -654,7 +653,6 @@ namespace makcu {
             // Wait for response with timeout
             if (future.wait_for(std::chrono::milliseconds(150)) == std::future_status::timeout) {
                 m_impl->serialPort->close();
-                m_impl->status = ConnectionStatus::CONNECTION_ERROR;
                 m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
                 m_impl->deviceInfo.isConnected = false;
                 return false;
@@ -666,7 +664,6 @@ namespace makcu {
         catch (...) {
             // Device not responding properly
             m_impl->serialPort->close();
-            m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             m_impl->deviceInfo.isConnected = false;
             return false;
@@ -681,7 +678,6 @@ namespace makcu {
 
         // Atomically update all connection state before starting monitoring thread
         m_impl->atomicStatus.store(ConnectionStatus::CONNECTED, std::memory_order_release);
-        m_impl->status = ConnectionStatus::CONNECTED;
         m_impl->buttonMonitoringEnabled.store(true, std::memory_order_release);
         
         // Use acquire-release semantics to ensure all state is visible before connected flag is set
@@ -698,7 +694,6 @@ namespace makcu {
             // Thread creation failed - cleanup and return error
             m_impl->connected.store(false, std::memory_order_release);
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
-            m_impl->status = ConnectionStatus::CONNECTION_ERROR;
             m_impl->deviceInfo.isConnected = false;
             m_impl->serialPort->close();
             return false;
@@ -757,7 +752,6 @@ namespace makcu {
             }
 
             // Update remaining state after serial port is closed.
-            m_impl->status = ConnectionStatus::DISCONNECTED;
             m_impl->deviceInfo.isConnected = false;
             m_impl->currentButtonMask.store(0, std::memory_order_release);
             m_impl->lockStateCacheValid.store(false, std::memory_order_release);
@@ -770,11 +764,11 @@ namespace makcu {
     }
 
 
-    bool Device::isConnected() const {
+    bool Device::isConnected() const noexcept {
         return m_impl->connected.load(std::memory_order_acquire);
     }
 
-    ConnectionStatus Device::getStatus() const {
+    ConnectionStatus Device::getStatus() const noexcept {
         return m_impl->atomicStatus.load(std::memory_order_acquire);
     }
 
@@ -840,11 +834,8 @@ namespace makcu {
             return false;
         }
 
-        auto it = m_impl->commandCache.press_commands.find(button);
-        if (it != m_impl->commandCache.press_commands.end()) {
-            return m_impl->executeCommand(it->second);
-        }
-        return false;
+        const auto* cmd = m_impl->commandCache.getPressCommand(button);
+        return cmd ? m_impl->executeCommand(*cmd) : false;
     }
 
     bool Device::mouseUp(MouseButton button) {
@@ -852,11 +843,8 @@ namespace makcu {
             return false;
         }
 
-        auto it = m_impl->commandCache.release_commands.find(button);
-        if (it != m_impl->commandCache.release_commands.end()) {
-            return m_impl->executeCommand(it->second);
-        }
-        return false;
+        const auto* cmd = m_impl->commandCache.getReleaseCommand(button);
+        return cmd ? m_impl->executeCommand(*cmd) : false;
     }
 
     bool Device::click(MouseButton button) {
@@ -865,14 +853,12 @@ namespace makcu {
         }
 
         // For maximum performance, batch press+release
-        auto pressIt = m_impl->commandCache.press_commands.find(button);
-        auto releaseIt = m_impl->commandCache.release_commands.find(button);
+        const auto* pressCmd = m_impl->commandCache.getPressCommand(button);
+        const auto* releaseCmd = m_impl->commandCache.getReleaseCommand(button);
 
-        if (pressIt != m_impl->commandCache.press_commands.end() &&
-            releaseIt != m_impl->commandCache.release_commands.end()) {
-
-            bool result1 = m_impl->executeCommand(pressIt->second);
-            bool result2 = m_impl->executeCommand(releaseIt->second);
+        if (pressCmd && releaseCmd) {
+            bool result1 = m_impl->executeCommand(*pressCmd);
+            bool result2 = m_impl->executeCommand(*releaseCmd);
             return result1 && result2;
         }
         return false;
@@ -924,21 +910,14 @@ namespace makcu {
             return false;
         }
 
-        // Execute press, move, release sequence for optimal performance
-        auto pressIt = m_impl->commandCache.press_commands.find(button);
-        if (pressIt == m_impl->commandCache.press_commands.end()) {
-            return false;
-        }
-
-        auto releaseIt = m_impl->commandCache.release_commands.find(button);
-        if (releaseIt == m_impl->commandCache.release_commands.end()) {
-            return false;
-        }
+        const auto* pressCmd = m_impl->commandCache.getPressCommand(button);
+        const auto* releaseCmd = m_impl->commandCache.getReleaseCommand(button);
+        if (!pressCmd || !releaseCmd) return false;
 
         // Execute drag sequence: press -> move -> release
-        bool result1 = m_impl->executeCommand(pressIt->second);
+        bool result1 = m_impl->executeCommand(*pressCmd);
         bool result2 = m_impl->executeMoveCommand(x, y);
-        bool result3 = m_impl->executeCommand(releaseIt->second);
+        bool result3 = m_impl->executeCommand(*releaseCmd);
 
         return result1 && result2 && result3;
     }
@@ -948,20 +927,14 @@ namespace makcu {
             return false;
         }
 
-        auto pressIt = m_impl->commandCache.press_commands.find(button);
-        if (pressIt == m_impl->commandCache.press_commands.end()) {
-            return false;
-        }
-
-        auto releaseIt = m_impl->commandCache.release_commands.find(button);
-        if (releaseIt == m_impl->commandCache.release_commands.end()) {
-            return false;
-        }
+        const auto* pressCmd = m_impl->commandCache.getPressCommand(button);
+        const auto* releaseCmd = m_impl->commandCache.getReleaseCommand(button);
+        if (!pressCmd || !releaseCmd) return false;
 
         // Execute smooth drag sequence: press -> smooth move -> release
-        bool result1 = m_impl->executeCommand(pressIt->second);
+        bool result1 = m_impl->executeCommand(*pressCmd);
         bool result2 = m_impl->executeSmoothMoveCommand(x, y, segments);
-        bool result3 = m_impl->executeCommand(releaseIt->second);
+        bool result3 = m_impl->executeCommand(*releaseCmd);
 
         return result1 && result2 && result3;
     }
@@ -972,20 +945,14 @@ namespace makcu {
             return false;
         }
 
-        auto pressIt = m_impl->commandCache.press_commands.find(button);
-        if (pressIt == m_impl->commandCache.press_commands.end()) {
-            return false;
-        }
-
-        auto releaseIt = m_impl->commandCache.release_commands.find(button);
-        if (releaseIt == m_impl->commandCache.release_commands.end()) {
-            return false;
-        }
+        const auto* pressCmd = m_impl->commandCache.getPressCommand(button);
+        const auto* releaseCmd = m_impl->commandCache.getReleaseCommand(button);
+        if (!pressCmd || !releaseCmd) return false;
 
         // Execute bezier drag sequence: press -> bezier move -> release
-        bool result1 = m_impl->executeCommand(pressIt->second);
+        bool result1 = m_impl->executeCommand(*pressCmd);
         bool result2 = m_impl->executeBezierMoveCommand(x, y, segments, ctrl_x, ctrl_y);
-        bool result3 = m_impl->executeCommand(releaseIt->second);
+        bool result3 = m_impl->executeCommand(*releaseCmd);
 
         return result1 && result2 && result3;
     }
@@ -1006,9 +973,10 @@ namespace makcu {
     bool Device::lockMouseX(bool lock) {
         if (!m_impl->connected.load()) return false;
 
+        auto idx = std::to_underlying(Impl::LockTarget::X);
         const std::string& command = lock ?
-            m_impl->commandCache.lock_commands.at("X") :
-            m_impl->commandCache.unlock_commands.at("X");
+            m_impl->commandCache.lock_commands[idx] :
+            m_impl->commandCache.unlock_commands[idx];
 
         bool result = m_impl->executeCommand(command);
         if (result) {
@@ -1020,9 +988,10 @@ namespace makcu {
     bool Device::lockMouseY(bool lock) {
         if (!m_impl->connected.load()) return false;
 
+        auto idx = std::to_underlying(Impl::LockTarget::Y);
         const std::string& command = lock ?
-            m_impl->commandCache.lock_commands.at("Y") :
-            m_impl->commandCache.unlock_commands.at("Y");
+            m_impl->commandCache.lock_commands[idx] :
+            m_impl->commandCache.unlock_commands[idx];
 
         bool result = m_impl->executeCommand(command);
         if (result) {
@@ -1034,9 +1003,10 @@ namespace makcu {
     bool Device::lockMouseLeft(bool lock) {
         if (!m_impl->connected.load()) return false;
 
+        auto idx = std::to_underlying(Impl::LockTarget::LEFT);
         const std::string& command = lock ?
-            m_impl->commandCache.lock_commands.at("LEFT") :
-            m_impl->commandCache.unlock_commands.at("LEFT");
+            m_impl->commandCache.lock_commands[idx] :
+            m_impl->commandCache.unlock_commands[idx];
 
         bool result = m_impl->executeCommand(command);
         if (result) {
@@ -1048,9 +1018,10 @@ namespace makcu {
     bool Device::lockMouseMiddle(bool lock) {
         if (!m_impl->connected.load()) return false;
 
+        auto idx = std::to_underlying(Impl::LockTarget::MIDDLE);
         const std::string& command = lock ?
-            m_impl->commandCache.lock_commands.at("MIDDLE") :
-            m_impl->commandCache.unlock_commands.at("MIDDLE");
+            m_impl->commandCache.lock_commands[idx] :
+            m_impl->commandCache.unlock_commands[idx];
 
         bool result = m_impl->executeCommand(command);
         if (result) {
@@ -1062,9 +1033,10 @@ namespace makcu {
     bool Device::lockMouseRight(bool lock) {
         if (!m_impl->connected.load()) return false;
 
+        auto idx = std::to_underlying(Impl::LockTarget::RIGHT);
         const std::string& command = lock ?
-            m_impl->commandCache.lock_commands.at("RIGHT") :
-            m_impl->commandCache.unlock_commands.at("RIGHT");
+            m_impl->commandCache.lock_commands[idx] :
+            m_impl->commandCache.unlock_commands[idx];
 
         bool result = m_impl->executeCommand(command);
         if (result) {
@@ -1076,9 +1048,10 @@ namespace makcu {
     bool Device::lockMouseSide1(bool lock) {
         if (!m_impl->connected.load()) return false;
 
+        auto idx = std::to_underlying(Impl::LockTarget::SIDE1);
         const std::string& command = lock ?
-            m_impl->commandCache.lock_commands.at("SIDE1") :
-            m_impl->commandCache.unlock_commands.at("SIDE1");
+            m_impl->commandCache.lock_commands[idx] :
+            m_impl->commandCache.unlock_commands[idx];
 
         bool result = m_impl->executeCommand(command);
         if (result) {
@@ -1090,9 +1063,10 @@ namespace makcu {
     bool Device::lockMouseSide2(bool lock) {
         if (!m_impl->connected.load()) return false;
 
+        auto idx = std::to_underlying(Impl::LockTarget::SIDE2);
         const std::string& command = lock ?
-            m_impl->commandCache.lock_commands.at("SIDE2") :
-            m_impl->commandCache.unlock_commands.at("SIDE2");
+            m_impl->commandCache.lock_commands[idx] :
+            m_impl->commandCache.unlock_commands[idx];
 
         bool result = m_impl->executeCommand(command);
         if (result) {
@@ -1232,11 +1206,11 @@ namespace makcu {
         return result;
     }
 
-    bool Device::isButtonMonitoringEnabled() const {
+    bool Device::isButtonMonitoringEnabled() const noexcept {
         return m_impl->buttonMonitoringEnabled.load(std::memory_order_acquire);
     }
 
-    uint8_t Device::getButtonMask() const {
+    uint8_t Device::getButtonMask() const noexcept {
         return m_impl->currentButtonMask.load();
     }
 
@@ -1377,7 +1351,7 @@ namespace makcu {
         m_impl->highPerformanceMode.store(enable);
     }
 
-    bool Device::isHighPerformanceModeEnabled() const {
+    bool Device::isHighPerformanceModeEnabled() const noexcept {
         return m_impl->highPerformanceMode.load();
     }
 
@@ -1423,12 +1397,12 @@ namespace makcu {
             return *this;
         }
         auto& cache = m_device->m_impl->commandCache;
-        auto pressIt = cache.press_commands.find(button);
-        auto releaseIt = cache.release_commands.find(button);
+        const auto* pressCmd = cache.getPressCommand(button);
+        const auto* releaseCmd = cache.getReleaseCommand(button);
 
-        if (pressIt != cache.press_commands.end() && releaseIt != cache.release_commands.end()) {
-            m_commands.push_back(pressIt->second);
-            m_commands.push_back(releaseIt->second);
+        if (pressCmd && releaseCmd) {
+            m_commands.push_back(*pressCmd);
+            m_commands.push_back(*releaseCmd);
         }
         return *this;
     }
@@ -1438,9 +1412,9 @@ namespace makcu {
             return *this;
         }
         auto& cache = m_device->m_impl->commandCache;
-        auto it = cache.press_commands.find(button);
-        if (it != cache.press_commands.end()) {
-            m_commands.push_back(it->second);
+        const auto* cmd = cache.getPressCommand(button);
+        if (cmd) {
+            m_commands.push_back(*cmd);
         }
         return *this;
     }
@@ -1450,9 +1424,9 @@ namespace makcu {
             return *this;
         }
         auto& cache = m_device->m_impl->commandCache;
-        auto it = cache.release_commands.find(button);
-        if (it != cache.release_commands.end()) {
-            m_commands.push_back(it->second);
+        const auto* cmd = cache.getReleaseCommand(button);
+        if (cmd) {
+            m_commands.push_back(*cmd);
         }
         return *this;
     }
@@ -1470,15 +1444,14 @@ namespace makcu {
             return *this;
         }
         auto& cache = m_device->m_impl->commandCache;
-        auto pressIt = cache.press_commands.find(button);
-        auto releaseIt = cache.release_commands.find(button);
+        const auto* pressCmd = cache.getPressCommand(button);
+        const auto* releaseCmd = cache.getReleaseCommand(button);
 
-        if (pressIt != cache.press_commands.end() && releaseIt != cache.release_commands.end()) {
+        if (pressCmd && releaseCmd) {
             // Add press, move, release commands to batch (consistent with normal mouseDrag format)
-            m_commands.push_back(pressIt->second);
-            std::string moveCommand = "km.move(" + std::to_string(x) + "," + std::to_string(y) + ")";
-            m_commands.push_back(moveCommand);
-            m_commands.push_back(releaseIt->second);
+            m_commands.push_back(*pressCmd);
+            m_commands.push_back("km.move(" + std::to_string(x) + "," + std::to_string(y) + ")");
+            m_commands.push_back(*releaseCmd);
         }
         return *this;
     }
@@ -1488,14 +1461,14 @@ namespace makcu {
             return *this;
         }
         auto& cache = m_device->m_impl->commandCache;
-        auto pressIt = cache.press_commands.find(button);
-        auto releaseIt = cache.release_commands.find(button);
+        const auto* pressCmd = cache.getPressCommand(button);
+        const auto* releaseCmd = cache.getReleaseCommand(button);
 
-        if (pressIt != cache.press_commands.end() && releaseIt != cache.release_commands.end()) {
+        if (pressCmd && releaseCmd) {
             // Add press, smooth move, release commands to batch
-            m_commands.push_back(pressIt->second);
+            m_commands.push_back(*pressCmd);
             m_commands.push_back("km.move(" + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(segments) + ")");
-            m_commands.push_back(releaseIt->second);
+            m_commands.push_back(*releaseCmd);
         }
         return *this;
     }
@@ -1506,15 +1479,15 @@ namespace makcu {
             return *this;
         }
         auto& cache = m_device->m_impl->commandCache;
-        auto pressIt = cache.press_commands.find(button);
-        auto releaseIt = cache.release_commands.find(button);
+        const auto* pressCmd = cache.getPressCommand(button);
+        const auto* releaseCmd = cache.getReleaseCommand(button);
 
-        if (pressIt != cache.press_commands.end() && releaseIt != cache.release_commands.end()) {
+        if (pressCmd && releaseCmd) {
             // Add press, bezier move, release commands to batch
-            m_commands.push_back(pressIt->second);
+            m_commands.push_back(*pressCmd);
             m_commands.push_back("km.move(" + std::to_string(x) + "," + std::to_string(y) + "," +
                 std::to_string(segments) + "," + std::to_string(ctrl_x) + "," + std::to_string(ctrl_y) + ")");
-            m_commands.push_back(releaseIt->second);
+            m_commands.push_back(*releaseCmd);
         }
         return *this;
     }

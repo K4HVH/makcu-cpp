@@ -88,6 +88,7 @@ static makcu_connection_status_t convert_connection_status(makcu::ConnectionStat
 }
 
 static makcu_error_t handle_exception() {
+    if (!std::current_exception()) return MAKCU_ERROR_COMMAND_FAILED;
     try {
         throw;
     } catch (const makcu::ConnectionException&) {

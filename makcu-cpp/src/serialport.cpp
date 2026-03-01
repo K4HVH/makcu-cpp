@@ -122,16 +122,9 @@ bool SerialPort::open(const std::string& port, uint32_t baudRate) {
 }
 
 void SerialPort::close() {
-	std::lock_guard<std::mutex> lock(m_mutex);
-
-	if (!m_isOpen.load(std::memory_order_acquire)) {
-		return;
-	}
-
-	// Mark closed first so no new I/O starts while we tear down.
-	m_isOpen.store(false, std::memory_order_release);
-
-	// Stop listener thread first.
+	// Stop listener thread BEFORE acquiring mutex to avoid deadlock.
+	// The listener may call processResponse which acquires m_commandMutex,
+	// while another thread might hold m_commandMutex and wait for m_mutex.
 	if (m_listenerThread.joinable()) {
 		m_listenerThread.request_stop();
 		if (std::this_thread::get_id() == m_listenerThread.get_id()) {
@@ -142,6 +135,15 @@ void SerialPort::close() {
 			m_listenerThread.join();
 		}
 	}
+
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	if (!m_isOpen.load(std::memory_order_acquire)) {
+		return;
+	}
+
+	// Mark closed so no new I/O starts while we tear down.
+	m_isOpen.store(false, std::memory_order_release);
 
 	// Cancel all pending commands with double-checked locking for safety
 	// First pass: mark all commands as cancelled to prevent new promise operations
@@ -174,7 +176,7 @@ void SerialPort::close() {
 	m_lastButtonMask.store(0, std::memory_order_release);
 }
 
-bool SerialPort::isOpen() const {
+bool SerialPort::isOpen() const noexcept {
 	return m_isOpen;
 }
 
@@ -536,15 +538,15 @@ void SerialPort::handleButtonData(uint8_t data) {
 }
 
 void SerialPort::processResponse(const std::string& response) {
-	// Remove ">>> " prefix if present
-	std::string content = response;
-	if (content.substr(0, 4) == ">>> ") {
+	// Remove ">>> " prefix if present using string_view to avoid copies
+	std::string_view content = response;
+	if (content.starts_with(">>> ")) {
 		content = content.substr(4);
 	}
 
 	// Check for command ID correlation.
 	const auto parsedResponse = parseTrackedResponse(content);
-	std::string untrackedContent = content;
+	std::string untrackedContent{content};
 	if (parsedResponse) {
 		auto [cmdId, result] = parsedResponse.value();
 		{
@@ -623,8 +625,9 @@ void SerialPort::cleanupTimedOutCommands() {
 
 int SerialPort::generateCommandId() {
 	// Must be called with m_commandMutex held.
-	constexpr uint32_t MAX_COMMAND_ID = static_cast<uint32_t>((std::numeric_limits<int>::max)());
-	for (uint32_t attempts = 0; attempts < MAX_COMMAND_ID; ++attempts) {
+	constexpr uint32_t MAX_ATTEMPTS = 65536;
+	for (uint32_t attempts = 0; attempts < MAX_ATTEMPTS; ++attempts) {
+		constexpr uint32_t MAX_COMMAND_ID = static_cast<uint32_t>((std::numeric_limits<int>::max)());
 		if (m_commandCounter >= MAX_COMMAND_ID) {
 			m_commandCounter = 0;
 		}
@@ -657,11 +660,11 @@ bool SerialPort::setBaudRate(uint32_t baudRate) {
 	return true;
 }
 
-uint32_t SerialPort::getBaudRate() const {
+uint32_t SerialPort::getBaudRate() const noexcept {
 	return m_baudRate;
 }
 
-std::string SerialPort::getPortName() const {
+std::string SerialPort::getPortName() const noexcept {
 	return m_portName;
 }
 
@@ -723,7 +726,7 @@ size_t SerialPort::available() const {
 	}
 
 	// Unified bytes available check
-	return const_cast<SerialPort*>(this)->platformBytesAvailable();
+	return platformBytesAvailable();
 }
 
 bool SerialPort::flush() {
@@ -744,7 +747,7 @@ void SerialPort::setTimeout(uint32_t timeoutMs) {
 	}
 }
 
-uint32_t SerialPort::getTimeout() const {
+uint32_t SerialPort::getTimeout() const noexcept {
 	return m_timeout;
 }
 
@@ -1195,7 +1198,7 @@ ssize_t SerialPort::platformRead(void* buffer, size_t maxBytes) {
 #endif
 }
 
-size_t SerialPort::platformBytesAvailable() {
+size_t SerialPort::platformBytesAvailable() const {
 	std::lock_guard<std::mutex> nativeLock(m_nativeHandleMutex);
 #ifdef _WIN32
 	COMSTAT comStat;
