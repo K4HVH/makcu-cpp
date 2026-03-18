@@ -281,6 +281,9 @@ namespace makcu {
         [[deprecated("Use typed Device methods and callbacks instead of raw response polling.")]]
         [[nodiscard]] std::string receiveRawResponse() const;
 
+        // Error handling
+        std::string getLastError();
+
     private:
         // Implementation details with caching and optimization
         class Impl;

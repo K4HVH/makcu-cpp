@@ -748,7 +748,11 @@ void SerialPort::setTimeout(uint32_t timeoutMs) {
 }
 
 uint32_t SerialPort::getTimeout() const noexcept {
-	return m_timeout.load(std::memory_order_relaxed);
+    return m_timeout.load(std::memory_order_relaxed);
+}
+
+std::string SerialPort::getLastError() {
+    return getLastPlatformError();
 }
 
 std::vector<std::string> SerialPort::getAvailablePorts() {

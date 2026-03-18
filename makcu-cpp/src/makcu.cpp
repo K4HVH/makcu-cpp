@@ -178,6 +178,7 @@ namespace makcu {
         std::atomic<bool> connected;
         std::atomic<bool> highPerformanceMode;
         mutable std::mutex mutex;
+        static std::string lastError;
 
         // Command cache for ultra-fast lookups
         CommandCache commandCache;
@@ -239,6 +240,7 @@ namespace makcu {
         Impl() : serialPort(std::make_unique<SerialPort>())
             , connected(false)
             , highPerformanceMode(false) {
+          
             deviceInfo.isConnected = false;
 
             // Pre-allocate command buffers to avoid frequent allocations
@@ -275,11 +277,13 @@ namespace makcu {
             };
 
             // Send the baud rate change command
-            if (!serialPort->write(baudChangeCommand)) {
+            if (!serialPort->write(baudChangeCommand)) {   
+                setLastError("Baud rate change serial port write failed: " + serialPort->getLastError());
                 return false;
             }
 
             if (!serialPort->flush()) {
+                setLastError("Baud rate change serial port flush failed: " + serialPort->getLastError());
                 return false;
             }
 
@@ -290,14 +294,20 @@ namespace makcu {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
             if (!serialPort->open(portName, baudRate)) {
+                setLastError("Baud rate change serial port open failed: " + serialPort->getLastError());
                 return false;
             }
 
             return true;
         }
 
+        static void setLastError(const std::string& error) {
+            lastError = error;
+        }
+
         bool initializeDevice() {
             if (!serialPort->isOpen()) {
+                setLastError("Initialize device serial port open failed: " + serialPort->getLastError());
                 return false;
             }
 
@@ -565,6 +575,7 @@ namespace makcu {
     Device::Device()
         : m_impl(std::make_unique<Impl>())
         , m_lifetimeToken(std::make_shared<std::atomic<bool>>(true)) {}
+    std::string Device::Impl::lastError = "";
 
     Device::~Device() {
         if (m_lifetimeToken) {
@@ -590,6 +601,11 @@ namespace makcu {
         return devices;
     }
 
+    std::string Device::getLastError()
+    {
+        return m_impl->lastError;
+    }
+
     std::string Device::findFirstDevice() {
         auto devices = findDevices();
         return devices.empty() ? "" : devices[0].port;
@@ -605,6 +621,7 @@ namespace makcu {
         std::string targetPort = port.empty() ? findFirstDevice() : port;
         if (targetPort.empty()) {
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
+            m_impl->setLastError("Invalid device port!");
             return false;
         }
 
@@ -613,11 +630,13 @@ namespace makcu {
         // Open at initial baud rate
         if (!m_impl->serialPort->open(targetPort, INITIAL_BAUD_RATE)) {
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
+            m_impl->setLastError("Serial port open failed: " + m_impl->serialPort->getLastError());
             return false;
         }
 
-        // Switch to high-speed mode
-        if (!Impl::performBaudRateChange(m_impl->serialPort.get(), HIGH_SPEED_BAUD_RATE)) {
+        // Switch to high-speed mode if requested
+        if (highSpeed && !Impl::performBaudRateChange(m_impl->serialPort.get(), HIGH_SPEED_BAUD_RATE))
+        {
             m_impl->serialPort->close();
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             m_impl->deviceInfo.isConnected = false;
@@ -626,6 +645,7 @@ namespace makcu {
 
         // Validate connection after baud rate switch
         if (!m_impl->serialPort->isOpen() || !m_impl->serialPort->isActuallyConnected()) {
+            m_impl->setLastError("Serial port not opened or connected!");
             m_impl->serialPort->close();
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             m_impl->deviceInfo.isConnected = false;
@@ -648,6 +668,7 @@ namespace makcu {
             
             // Wait for response with timeout
             if (future.wait_for(std::chrono::milliseconds(150)) == std::future_status::timeout) {
+                m_impl->setLastError("Device connection response timeout!");
                 m_impl->serialPort->close();
                 m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
                 m_impl->deviceInfo.isConnected = false;
@@ -659,6 +680,7 @@ namespace makcu {
         }
         catch (...) {
             // Device not responding properly
+            m_impl->setLastError("Device not responding properly!");
             m_impl->serialPort->close();
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             m_impl->deviceInfo.isConnected = false;
@@ -688,6 +710,7 @@ namespace makcu {
             });
         } catch (const std::system_error&) {
             // Thread creation failed - cleanup and return error
+            m_impl->setLastError("Monitoring thread creation failure!");
             m_impl->connected.store(false, std::memory_order_release);
             m_impl->atomicStatus.store(ConnectionStatus::CONNECTION_ERROR, std::memory_order_release);
             m_impl->deviceInfo.isConnected = false;
