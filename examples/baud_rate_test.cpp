@@ -2,6 +2,7 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <string_view>
 
 using namespace makcu;
 
@@ -32,10 +33,18 @@ int main() {
         
         std::cout << "Connected successfully at 4M baud rate!\n";
         
+        auto is_valid_version = [](std::string_view version) {
+            return version.find("km.MAKCU") != std::string_view::npos;
+        };
+
         // Test communication at 4M baud rate
         std::cout << "Testing communication at 4M baud...\n";
         auto version = device.getVersion();
         std::cout << "Version: " << version << "\n\n";
+        if (!is_valid_version(version)) {
+            std::cout << "Error: invalid version response at 4M baud.\n";
+            return 1;
+        }
         
         // Test manual baud rate change to a different speed
         std::cout << "Testing manual baud rate change to 2M...\n";
@@ -46,6 +55,10 @@ int main() {
             std::cout << "Testing communication at 2M baud...\n";
             version = device.getVersion();
             std::cout << "Version: " << version << "\n";
+            if (!is_valid_version(version)) {
+                std::cout << "Error: invalid version response at 2M baud.\n";
+                return 1;
+            }
             
             // Change back to 4M
             std::cout << "\nChanging back to 4M baud rate...\n";
@@ -53,9 +66,17 @@ int main() {
                 std::cout << "Successfully changed back to 4M baud rate!\n";
                 version = device.getVersion();
                 std::cout << "Version: " << version << "\n";
+                if (!is_valid_version(version)) {
+                    std::cout << "Error: invalid version response after returning to 4M baud.\n";
+                    return 1;
+                }
+            } else {
+                std::cout << "Error: failed to change back to 4M baud rate.\n";
+                return 1;
             }
         } else {
-            std::cout << "Failed to change baud rate to 2M!\n";
+            std::cout << "Error: failed to change baud rate to 2M!\n";
+            return 1;
         }
         
         std::cout << "\nNote: All baud rate changes are temporary and will reset to 115200\n";

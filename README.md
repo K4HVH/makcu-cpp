@@ -4,9 +4,9 @@ High-performance C++ library for MAKCU mouse controllers. Sub-millisecond respon
 
 ## Prerequisites
 
-- C++17 compiler (for C++ API)
+- C++23 compiler (for C++ API)
 - C99 compiler (for C API only)
-- CMake 3.15+
+- CMake 3.20+
 - MAKCU Device (VID:PID = 1A86:55D3)
 - Linux: `libudev-dev`, `pkg-config`
 
@@ -36,7 +36,7 @@ target_link_libraries(your_app PRIVATE makcu::makcu-cpp)
 Basic C++ usage:
 
 ```cpp
-#include <makcu/makcu.h>
+#include <makcu.h>
 
 makcu::Device device;
 device.connect();
@@ -49,7 +49,7 @@ device.click(makcu::MouseButton::LEFT);
 The library includes a complete C ABI for easy integration with Python, Rust, Go, C#, and other languages:
 
 ```c
-#include <makcu/makcu.h>
+#include <makcu_c.h>
 
 makcu_device_t* device = makcu_device_create();
 makcu_connect(device, "");
@@ -64,7 +64,7 @@ See `examples/` for complete integration examples.
 
 ```bash
 cd examples && ./build.sh  # Build examples
-./build/bin/demo            # Run demo
+./build/bin/demo           # Run demo
 ```
 
 ## Performance
