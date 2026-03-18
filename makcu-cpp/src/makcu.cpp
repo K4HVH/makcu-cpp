@@ -611,7 +611,7 @@ namespace makcu {
         return devices.empty() ? "" : devices[0].port;
     }
 
-    bool Device::connect(const std::string& port) {
+    bool Device::connect(const std::string& port, bool highSpeed) {
         std::unique_lock<std::mutex> lock(m_impl->mutex);
 
         if (m_impl->connected.load()) {

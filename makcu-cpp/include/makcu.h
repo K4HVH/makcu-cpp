@@ -140,7 +140,7 @@ namespace makcu {
         static std::string findFirstDevice();
 
         // Connection with async support
-        [[nodiscard]] bool connect(const std::string& port = "");
+        [[nodiscard]] bool connect(const std::string& port = "", bool highSpeed = true);
         void disconnect();
         [[nodiscard]] bool isConnected() const noexcept;
         [[nodiscard]] ConnectionStatus getStatus() const noexcept;
