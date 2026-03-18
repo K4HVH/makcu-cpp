@@ -101,6 +101,9 @@ namespace makcu {
         using ButtonCallback = std::function<void(uint8_t, bool)>;
         void setButtonCallback(ButtonCallback callback);
 
+        // Get last platform error
+        std::string getLastError();
+
     private:
         std::string m_portName;
         uint32_t m_baudRate;
